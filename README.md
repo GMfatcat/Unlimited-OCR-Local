@@ -60,8 +60,13 @@ from transformers import AutoModel, AutoTokenizer
 model_name = 'baidu/Unlimited-OCR'
 
 tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
-model = AutoModel.from_pretrained(model_name, trust_remote_code=True, use_safetensors=True)
-model = model.eval().cuda().to(torch.bfloat16)
+model = AutoModel.from_pretrained(
+    model_name,
+    trust_remote_code=True,
+    use_safetensors=True,
+    torch_dtype=torch.bfloat16,
+)
+model = model.eval().cuda()
 
 # ── Single image supports two configs: gundam or base ──
 # gundam: base_size=1024, image_size=640, crop_mode=True
