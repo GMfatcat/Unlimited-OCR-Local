@@ -16,7 +16,7 @@
 </div>
 
 <div align="center">
-    <a href="https://github.com/baidu/Unlimited-OCR/blob/main/Unlimited-OCR.pdf">
+    <a href="https://arxiv.org/abs/2606.23050">
     <img alt="arXiv" src="https://img.shields.io/badge/arXiv-Unlimited OCR Works-b31b1b?logo=arxiv&logoColor=white" />
   </a>
   <a href="https://x.com/Baidu_Inc" target="_blank">
@@ -32,8 +32,9 @@
 
 
 ## Release
-- [2026/06/22] 🚀 We present [Unlimited-OCR](https://github.com/baidu/Unlimited-OCR), aiming to push [Deepseek-OCR](https://github.com/deepseek-ai/DeepSeek-OCR) one step further.
+- [2026/06/23] 📄 Our paper is now available on [arXiv](https://arxiv.org/abs/2606.23050).
 - [2026/06/23] 🤝 Thanks to the ModelScope community for their support. Our model is now available at [ModelScope](https://modelscope.cn/models/PaddlePaddle/Unlimited-OCR).
+- [2026/06/22] 🚀 We present [Unlimited-OCR](https://github.com/baidu/Unlimited-OCR), aiming to push [Deepseek-OCR](https://github.com/deepseek-ai/DeepSeek-OCR) one step further.
 
 ## Inference
 
@@ -276,11 +277,13 @@ Useful options:
 We would like to thank [Deepseek-OCR](https://github.com/deepseek-ai/DeepSeek-OCR), [Deepseek-OCR-2](https://github.com/deepseek-ai/DeepSeek-OCR-2), [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) for their valuable models and ideas.
 
 ## Citation
-Coming soon!
-<!-- ```bibtex
-@article{,
-  title={Unlimited OCR Works},
-  author={},
-  journal={arXiv preprint arXiv:},
-  year={2026}
-} -->
+```bibtex
+@misc{yin2026unlimitedocrworks,
+      title={Unlimited OCR Works}, 
+      author={Youyang Yin and Huanhuan Liu and YY and Qunyi Xie and Chaorun Liu and Shiqi Yang and Shaohua Wang and Zhanlong Liu and Hao Zou and Jinyue Chen and Shu Wei and Jingjing Wu and Mingxin Huang and Zhen Wu and Guibin Wang and Tengyu Du and Lei Jia},
+      year={2026},
+      eprint={2606.23050},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2606.23050}, 
+}
