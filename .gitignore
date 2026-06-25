@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Downloaded HF model snapshot (6.7GB weights) — do not commit
+unlimited-ocr-hf/
+
 # Virtual environments
 .venv/
 venv/

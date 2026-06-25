@@ -92,7 +92,13 @@ Windows 瀏覽器  ──localhost:8501──▶  Streamlit (WSL, .venv-sglang)
 | SGLang 與 transformers 同時佔 VRAM | UI 一次只跑一個後端（D6） |
 
 ## 6. 實際結果 (Results) — 實作後回填
-- 採用權重路徑: _待填_
-- Transformers 安裝/結果: _待填_
-- SGLang 採用 backend / 結果: _待填_
-- Streamlit 啟動方式: _待填_
+- **採用權重路徑**: 直接讀 `/mnt/c/.../unlimited-ocr-hf`(D3 首選）。實測模型載入 45.4s，足夠快，**不需複製到 WSL 原生磁碟**。
+- **Transformers 結果**: ✅ PASS。venv `~/uocr/.venv-transformers`，torch 2.10.0+cu129 / transformers 4.57.1，GPU capability (12,0)=sm_120。**載入必須 `attn_implementation="eager"`**（config `use_mla=False` → 只有 `mha_eager` 實作）。單頁 gundam 13.6s/1970 字、多頁 base(2 頁)2640 字，OCR 與版面偵測品質佳。
+- **SGLang 採用 backend / 結果**: ✅ PASS，**attention-backend = `triton`**。D4 fallback 實測：
+  - `fa3` ❌ —「FlashAttention v3 requires SM>=80 and SM<=90」，Blackwell sm_120 不支援。
+  - `flashinfer` ❌ — cuda graph capture 時要 JIT 編譯 sliding-window decode kernel，`check_cuda_arch`/需 nvcc 而失敗。
+  - `triton` ✅ — 成功啟動並服務。對測試 PDF 14 頁全部成功，總 13473 tokens、wall 27.86s、System TPS ~484 tok/s、decode gen throughput ~750–800 tok/s。
+  - **系統前置(需 root，見 `scripts/wsl/04_system_prereqs.sh`)**：`libnuma1/-dev`(sgl_kernel .so 依賴)、`build-essential`(gcc，Triton/tvm_ffi JIT)、`python3-dev`(Python.h)、**CUDA Toolkit 12.8**(`cuda-nvcc-12-8` 等；nvcc≥12.8 才支援 sm_120 的 runtime JIT)。
+  - **啟動環境變數(見 `03_start_sglang_server.sh`)**：`CUDA_HOME=/usr/local/cuda`、`PATH` 含 `venv/bin`(ninja) 與 `/usr/local/cuda/bin`(nvcc)、`SGLANG_ENABLE_JIT_DEEPGEMM=0`、`TORCH_CUDA_ARCH_LIST=12.0`。
+  - 注意：MoE 無 RTX 5070 Ti 的 tuned config，效能非最佳(僅警告)。VRAM 在 mem-fraction 0.8 下載入後 avail ~1.9GB，可服務。
+- **Streamlit 啟動方式**: `~/uocr/.venv-sglang/bin/streamlit run app.py`(headless 實測 root/health 皆 200)。後端邏輯抽到 `ocr_backends.py`：SGLang 串流(實測 511 deltas、TTFT 1.38s) 與 Transformers 子行程批次兩種；因 VRAM 一次只跑一個。瀏覽器開 `http://localhost:8501`。
