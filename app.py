@@ -32,7 +32,8 @@ from ocr_backends import (
 TAIL_LINES = 40
 PANE_H = 980
 NAV_BUTTONS_FROM = 16
-RENDER_THROTTLE = 0.15   # 串流中渲染（文字/框/指標）最小間隔（秒）；避免每 token O(n) 重繪拖慢消化串流
+RENDER_THROTTLE = 0.15   # 文字 tail / 指標更新最小間隔（秒）：便宜、可頻繁
+IMG_THROTTLE = 0.7       # 疊框圖重畫最小間隔（秒）：每張 PNG 數百 KB，太頻繁會塞爆 websocket、餓死文字更新
 
 st.set_page_config(page_title="Unlimited-OCR", layout="wide")
 
@@ -155,24 +156,28 @@ def run_ocr():
             raw, drawn, page_units = "", 0, 0
             p_start = time.time()
             last_r = 0.0
+            last_img = [0.0]
 
             def render(force=False):
-                """節流渲染：文字 tail + 新框 + 指標。per-token 只累加，這裡才做 O(n) 的解析/重繪。"""
+                """文字 tail / 指標：便宜、常更新。疊框圖：昂貴(數百 KB)，獨立慢節流，避免塞爆 websocket 餓死文字。"""
                 nonlocal drawn
                 txt_ph.code(_tail(strip_markup(raw)), language=None)
+                el = time.time() - t_all
+                tot = total_units + page_units
+                show_metrics(metrics_ph, {"pages": f"{idx}/{len(images)}", "total": tot,
+                                          "elapsed": el, "speed": tot / el if el else 0,
+                                          "unit": unit, "sunit": sunit,
+                                          "timeouts": timeouts, "cappeds": cappeds})
                 if show_boxes:
+                    now2 = time.time()
                     dets = parse_dets(raw)
-                    if len(dets) > drawn or force:
+                    if force or (len(dets) > drawn and now2 - last_img[0] >= IMG_THROTTLE):
                         try:
                             img_ph.image(draw_dets(base, dets), use_container_width=True)
                         except Exception:
                             pass   # 壞框不應中斷串流
                         drawn = len(dets)
-                el = time.time() - t_all
-                tot = total_units + page_units
-                show_metrics(metrics_ph, {"pages": f"{idx}/{len(images)}", "total": tot,
-                                          "elapsed": el, "speed": tot / el if el else 0,
-                                          "unit": unit, "sunit": sunit, "timeouts": timeouts})
+                        last_img[0] = now2
 
             try:
                 for delta in sglang_stream(server_url, path, image_mode,
