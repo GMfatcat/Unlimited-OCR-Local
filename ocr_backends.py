@@ -181,12 +181,17 @@ def strip_markup(text):
     return t.strip()
 
 
-def load_display_image(image_path, max_width=900):
-    """開圖並（必要時）等比縮到 max_width，給 UI 顯示與畫框用。"""
+def load_display_image(image_path, max_width=900, max_height=None):
+    """開圖並等比縮放，使其同時不超過 max_width / max_height（給 UI 顯示與畫框用）。
+    框座標是相對影像尺寸（0–999），所以縮放後再畫框仍然正確。"""
     img = Image.open(image_path).convert("RGB")
-    if img.width > max_width:
-        ratio = max_width / img.width
-        img = img.resize((max_width, int(img.height * ratio)))
+    scale = 1.0
+    if max_width:
+        scale = min(scale, max_width / img.width)
+    if max_height:
+        scale = min(scale, max_height / img.height)
+    if scale < 1.0:
+        img = img.resize((max(1, int(img.width * scale)), max(1, int(img.height * scale))))
     return img
 
 
