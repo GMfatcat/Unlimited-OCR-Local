@@ -61,7 +61,7 @@ def _nav_step(delta, n):
     st.session_state.pagenum = min(n, max(1, st.session_state.pagenum + delta))
 
 
-@st.dialog("📖 使用說明")
+@st.dialog("📖 使用說明", width="large")
 def help_dialog():
     st.markdown(
         """
