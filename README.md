@@ -20,7 +20,8 @@
 - 🖥️ **Streamlit UI**：上傳圖片 / PDF，**邊掃邊呈現** —— 左欄即時長出版面偵測框、右欄純文字跟著掃描往下捲，含速度指標、逾時 / 上限防護、頁碼回看與 ZIP 匯出。
 
 > 完整的環境決策與實測數據見 [`docs/superpowers/specs/2026-06-25-unlimited-ocr-env-design.md`](docs/superpowers/specs/2026-06-25-unlimited-ocr-env-design.md)；
-> 一頁式的指令速查見 [`RUN.md`](RUN.md)。
+> 一頁式的指令速查見 [`RUN.md`](RUN.md)；
+> **開發踩坑記錄**（Blackwell/SGLang/UI 各種雷與解法）見 [`docs/DEVELOPMENT-NOTES.md`](docs/DEVELOPMENT-NOTES.md)。
 
 ## 🧩 環境與架構
 
