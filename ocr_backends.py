@@ -6,14 +6,17 @@ Unlimited-OCR 後端邏輯（與 UI 分離，方便測試）。
 - sglang_stream：呼叫 SGLang OpenAI 串流 API，yield 每個 token delta（即時）
 - transformers_run：以子行程在 .venv-transformers 跑 model.infer（批次）
 """
+import ast
 import base64
 import json
 import os
+import re
 import subprocess
 import tempfile
 
 import fitz  # PyMuPDF
 import requests
+from PIL import Image, ImageDraw, ImageFont
 
 REPO = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_MODEL_DIR = os.path.join(REPO, "unlimited-ocr-hf")
@@ -103,6 +106,112 @@ def sglang_stream(server_url, image_path, image_mode, ngram_window, ngram_size, 
             continue
         if delta:
             yield delta
+
+
+# ---------- det 解析 / 純文字 / 畫框 ----------
+# 模型輸出座標為 0–999 正規化；label 與 box 都包在 <|det|>…<|/det|> 內，
+# 例如：<|det|>header [123, 29, 322, 75]<|/det|>Baidu百度
+_DET_RE = re.compile(r"<\|det\|>\s*([A-Za-z_][\w-]*)\s*(\[[0-9,\s\.\[\]]+\])\s*<\|/det\|>")
+# 另一變體：<|ref|>label<|/ref|><|det|>[box]<|/det|>
+_REFDET_RE = re.compile(r"<\|ref\|>\s*([^<]+?)\s*<\|/ref\|>\s*<\|det\|>\s*(\[[0-9,\s\.\[\]]+\])\s*<\|/det\|>")
+
+# 依 label 給固定配色（比模型原本的隨機色乾淨）。RGB。
+LABEL_COLORS = {
+    "title": (220, 40, 40),
+    "header": (230, 140, 20),
+    "text": (40, 110, 220),
+    "image": (30, 170, 90),
+    "image_caption": (20, 160, 160),
+    "table": (150, 60, 200),
+    "table_caption": (120, 80, 200),
+    "list": (160, 100, 40),
+    "figure": (30, 170, 90),
+    "formula": (200, 60, 160),
+    "page_number": (130, 130, 130),
+    "footer": (130, 130, 130),
+}
+_DEFAULT_COLOR = (200, 60, 160)
+
+
+def _boxes_from_str(box_str):
+    """把 '[x1,y1,x2,y2]' 或 '[[..],[..]]' 解析成 [(x1,y1,x2,y2), ...]（0–999）。"""
+    try:
+        val = ast.literal_eval(box_str)
+    except Exception:
+        return []
+    if not val:
+        return []
+    if isinstance(val[0], (int, float)):
+        val = [val]
+    out = []
+    for b in val:
+        if isinstance(b, (list, tuple)) and len(b) >= 4:
+            out.append(tuple(float(x) for x in b[:4]))
+    return out
+
+
+def parse_dets(text):
+    """從（可能仍在串流中的）文字解析出已完整的偵測框。
+    回傳 [(label, [(x1,y1,x2,y2,)...]), ...]，座標仍是 0–999。"""
+    dets = []
+    for label, box_str in _DET_RE.findall(text):
+        boxes = _boxes_from_str(box_str)
+        if boxes:
+            dets.append((label.strip(), boxes))
+    for label, box_str in _REFDET_RE.findall(text):
+        boxes = _boxes_from_str(box_str)
+        if boxes:
+            dets.append((label.strip(), boxes))
+    return dets
+
+
+def strip_markup(text):
+    """移除所有 <|det|>…<|/det|>、<|ref|>…<|/ref|>、<PAGE>、其餘 <|…|> 特殊 token，
+    留下乾淨純文字。也會清掉串流尾端尚未閉合的標記碎片。"""
+    t = _REFDET_RE.sub("", text)
+    t = re.sub(r"<\|ref\|>.*?<\|/ref\|>", "", t, flags=re.DOTALL)
+    t = re.sub(r"<\|det\|>.*?<\|/det\|>", "", t, flags=re.DOTALL)
+    # 尾端未閉合的 <|det| / <|ref| 片段（串流中）
+    t = re.sub(r"<\|(?:det|ref)\|>.*\Z", "", t, flags=re.DOTALL)
+    t = t.replace("<PAGE>", "\n")
+    t = re.sub(r"<\|[^|]*\|>", "", t)        # 其餘特殊 token
+    t = re.sub(r"<\|[^|]*\Z", "", t)         # 尾端未閉合的 <|…
+    t = re.sub(r"[ \t]+\n", "\n", t)
+    t = re.sub(r"\n{3,}", "\n\n", t)
+    return t.strip()
+
+
+def load_display_image(image_path, max_width=900):
+    """開圖並（必要時）等比縮到 max_width，給 UI 顯示與畫框用。"""
+    img = Image.open(image_path).convert("RGB")
+    if img.width > max_width:
+        ratio = max_width / img.width
+        img = img.resize((max_width, int(img.height * ratio)))
+    return img
+
+
+def draw_dets(base_img, dets, font=None):
+    """在 base_img（PIL RGB）上畫出 dets 的框與 label，回傳新圖。座標 0–999 → 像素。"""
+    img = base_img.copy()
+    draw = ImageDraw.Draw(img, "RGBA")
+    W, H = img.size
+    if font is None:
+        font = ImageFont.load_default()
+    for label, boxes in dets:
+        color = LABEL_COLORS.get(label, _DEFAULT_COLOR)
+        width = 4 if label == "title" else 2
+        for (x1, y1, x2, y2) in boxes:
+            px1, py1 = int(x1 / 999 * W), int(y1 / 999 * H)
+            px2, py2 = int(x2 / 999 * W), int(y2 / 999 * H)
+            draw.rectangle([px1, py1, px2, py2], outline=color, width=width)
+            draw.rectangle([px1, py1, px2, py2], fill=color + (28,))
+            # label 小標
+            ty = max(0, py1 - 13)
+            tb = draw.textbbox((0, 0), label, font=font)
+            tw, th = tb[2] - tb[0], tb[3] - tb[1]
+            draw.rectangle([px1, ty, px1 + tw + 4, ty + th + 2], fill=(255, 255, 255, 220))
+            draw.text((px1 + 2, ty), label, font=font, fill=color)
+    return img
 
 
 def transformers_run(image_path, image_mode, model_dir=DEFAULT_MODEL_DIR, timeout=1800):
