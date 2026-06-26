@@ -54,6 +54,7 @@ def show_metrics(ph, m):
         f"📄 **{m['pages']}** 頁　·　⏱ **{m['elapsed']:.1f}s**　·　"
         f"🔤 **{m['total']:,}** {m['unit']}　·　⚡ **{m['speed']:.0f}** {m['sunit']}"
         + (f"　·　⏳ 逾時 **{m['timeouts']}** 頁" if m.get("timeouts") else "")
+        + (f"　·　🧱 達上限 **{m['cappeds']}** 頁" if m.get("cappeds") else "")
     )
 
 
@@ -105,7 +106,7 @@ with st.sidebar:
     ngram_window = st.number_input("ngram_window", 0, 4096, 128 if image_mode == "gundam" else 1024)
     max_tokens = st.number_input("每頁最多生成 tokens", 256, 32768, 4096,
                                  help="server 端上限：讓無限重複的頁乾淨提早結束，避免長到異常 token 數吃滿 GPU、拖垮後續頁。正常頁約 1–3k。")
-    page_timeout = st.number_input("每頁逾時 (秒)", 5, 600, 60,
+    page_timeout = st.number_input("每頁逾時 (秒)", 5, 600, 30,
                                    help="後備：單頁推理超過此秒數即中止並跳下一頁（max_tokens 是主要防線）")
     show_boxes = st.checkbox("在圖片上畫偵測框", value=True)
     if backend.startswith("SGLang"):
@@ -140,6 +141,7 @@ def run_ocr():
     t_all = time.time()
     total_units = 0
     timeouts = 0
+    cappeds = 0
 
     for idx, path in enumerate(images, 1):
         status.info(f"處理中：第 {idx} / {len(images)} 頁")
@@ -147,6 +149,7 @@ def run_ocr():
         img_ph.image(base, use_container_width=True)
         txt_ph.code("", language=None)
         timed_out = False
+        capped = False
 
         if is_sglang:
             raw, drawn, page_units = "", 0, 0
@@ -187,6 +190,9 @@ def run_ocr():
                 render(force=True)   # 收尾定版
             except Exception as e:
                 status.error(f"SGLang 串流失敗：{e}")
+            # 串流自然結束但 token 數達上限 → 是被 max_tokens 截斷（常見於鬼打牆頁）
+            if not timed_out and page_units >= int(max_tokens):
+                capped = True
         else:
             raw, page_units = "", 0
             try:
@@ -197,29 +203,41 @@ def run_ocr():
             txt_ph.code(_tail(strip_markup(raw)), language=None)
 
         clean = strip_markup(raw)
+        warn = None
         if timed_out:
             timeouts += 1
-            warn = f"\n\n⚠️ 本頁推理超時（>{int(page_timeout)}s），已中止並跳下一頁。辨識結果可能不完整或異常。"
-            clean += warn
-            raw += warn
+            warn = f"⚠️ 本頁推理超時（>{int(page_timeout)}s），已中止並跳下一頁。辨識結果可能不完整或異常。"
+        elif capped:
+            cappeds += 1
+            warn = f"⚠️ 本頁達生成上限（max_tokens={int(max_tokens)}），可能被截斷或重複生成。"
+        if warn:
+            status.warning(f"第 {idx} 頁：{warn}")
+            clean += "\n\n" + warn
+            raw += "\n\n" + warn
             txt_ph.code(_tail(clean), language=None)
 
         overlay = draw_dets(base, parse_dets(raw)) if show_boxes else base
         img_ph.image(overlay, use_container_width=True)
-        st.session_state.results.append({"overlay": overlay, "clean": clean, "raw": raw})
+        st.session_state.results.append({"overlay": overlay, "clean": clean, "raw": raw,
+                                         "flag": ("逾時" if timed_out else "達上限" if capped else "")})
 
         total_units += page_units
         elapsed = time.time() - t_all
         m = {"pages": f"{idx}/{len(images)}", "total": total_units, "elapsed": elapsed,
              "speed": total_units / elapsed if elapsed > 0 else 0,
-             "unit": unit, "sunit": sunit, "timeouts": timeouts}
+             "unit": unit, "sunit": sunit, "timeouts": timeouts, "cappeds": cappeds}
         st.session_state.metrics = m
         show_metrics(metrics_ph, m)
 
     st.session_state.zip_bytes = results_to_zip(st.session_state.results)
     msg = f"完成，共 {len(images)} 頁。"
+    extra = []
     if timeouts:
-        msg += f"（其中 {timeouts} 頁逾時）"
+        extra.append(f"{timeouts} 頁逾時")
+    if cappeds:
+        extra.append(f"{cappeds} 頁達上限")
+    if extra:
+        msg += "（其中 " + "、".join(extra) + "）"
     status.success(msg + " 可用下方控制回看、下載 ZIP。")
     st.rerun()
 
@@ -251,6 +269,10 @@ def review():
     results = st.session_state.results
     page = navigator(len(results))
     r = results[page - 1]
+    if r.get("flag"):
+        status.warning(f"第 {page} 頁標記：{r['flag']}（結果可能不完整）")
+    else:
+        status.empty()
     img_ph.image(r["overlay"], use_container_width=True)
     txt_ph.code(r["clean"], language=None)
     with st.expander("原始輸出（含 <|det|>/<|ref|> 標記）"):
