@@ -32,7 +32,7 @@ from ocr_backends import (
 TAIL_LINES = 40
 PANE_H = 980
 NAV_BUTTONS_FROM = 16
-METRIC_THROTTLE = 0.3
+RENDER_THROTTLE = 0.15   # 串流中渲染（文字/框/指標）最小間隔（秒）；避免每 token O(n) 重繪拖慢消化串流
 
 st.set_page_config(page_title="Unlimited-OCR", layout="wide")
 
@@ -80,8 +80,9 @@ def help_dialog():
   - *base*：整頁單視圖，**多頁/PDF** 較快。
 - 🔎 **PDF DPI**：PDF 轉圖解析度，越高越清楚但越慢（一般 300）。
 - 🔁 **no_repeat_ngram_size / ngram_window**：抑制重複生成的參數；數值越嚴格越能避免鬼打牆，但可能影響正常重複文字。
+- 🧱 **每頁最多生成 tokens**：server 端硬上限。某些頁會無限重複生成（鬼打牆），此上限讓它**乾淨提早結束**、不會長到異常 token 數吃滿 GPU 拖垮後續頁。正常頁約 1–3k，預設 4096 有餘裕。
 - 🟦 **在圖片上畫偵測框**：把 `<|det|>` 版面框畫到圖上（title 紅粗框、其餘依類別配色）。
-- ⏳ **每頁逾時 (秒)**：單頁推理超過此秒數即**中止並跳下一頁**（保留已辨識部分並標註），用來擋無限重複迴圈。
+- ⏳ **每頁逾時 (秒)**：後備防線。即使到不了 max_tokens 也會在此秒數中止跳下一頁（保留已辨識部分並標註）。
 
 ### 🧭 回看與匯出
 - 📄 頁數少 → 滑桿；頁數多（≥ 16）→ 輸入框 + 前往/上頁/下頁。
@@ -102,8 +103,10 @@ with st.sidebar:
     dpi = st.slider("PDF DPI", 150, 400, 300, 50)
     ngram_size = st.number_input("no_repeat_ngram_size", 0, 100, 35)
     ngram_window = st.number_input("ngram_window", 0, 4096, 128 if image_mode == "gundam" else 1024)
+    max_tokens = st.number_input("每頁最多生成 tokens", 256, 32768, 4096,
+                                 help="server 端上限：讓無限重複的頁乾淨提早結束，避免長到異常 token 數吃滿 GPU、拖垮後續頁。正常頁約 1–3k。")
     page_timeout = st.number_input("每頁逾時 (秒)", 5, 600, 60,
-                                   help="單頁推理超過此秒數即中止並跳下一頁（擋無限重複迴圈）")
+                                   help="後備：單頁推理超過此秒數即中止並跳下一頁（max_tokens 是主要防線）")
     show_boxes = st.checkbox("在圖片上畫偵測框", value=True)
     if backend.startswith("SGLang"):
         server_url = st.text_input("SGLang server", "http://127.0.0.1:10000")
@@ -137,7 +140,6 @@ def run_ocr():
     t_all = time.time()
     total_units = 0
     timeouts = 0
-    last_m = 0.0
 
     for idx, path in enumerate(images, 1):
         status.info(f"處理中：第 {idx} / {len(images)} 頁")
@@ -149,28 +151,40 @@ def run_ocr():
         if is_sglang:
             raw, drawn, page_units = "", 0, 0
             p_start = time.time()
+            last_r = 0.0
+
+            def render(force=False):
+                """節流渲染：文字 tail + 新框 + 指標。per-token 只累加，這裡才做 O(n) 的解析/重繪。"""
+                nonlocal drawn
+                txt_ph.code(_tail(strip_markup(raw)), language=None)
+                if show_boxes:
+                    dets = parse_dets(raw)
+                    if len(dets) > drawn or force:
+                        try:
+                            img_ph.image(draw_dets(base, dets), use_container_width=True)
+                        except Exception:
+                            pass   # 壞框不應中斷串流
+                        drawn = len(dets)
+                el = time.time() - t_all
+                tot = total_units + page_units
+                show_metrics(metrics_ph, {"pages": f"{idx}/{len(images)}", "total": tot,
+                                          "elapsed": el, "speed": tot / el if el else 0,
+                                          "unit": unit, "sunit": sunit, "timeouts": timeouts})
+
             try:
                 for delta in sglang_stream(server_url, path, image_mode,
-                                           int(ngram_window), int(ngram_size)):
+                                           int(ngram_window), int(ngram_size),
+                                           max_tokens=int(max_tokens)):
                     raw += delta
                     page_units += 1
-                    txt_ph.code(_tail(strip_markup(raw)), language=None)
-                    if show_boxes:
-                        dets = parse_dets(raw)
-                        if len(dets) > drawn:
-                            img_ph.image(draw_dets(base, dets), use_container_width=True)
-                            drawn = len(dets)
                     now = time.time()
                     if now - p_start > page_timeout:        # 逾時 → 中止本頁（break 會關連線、abort 請求）
                         timed_out = True
                         break
-                    if now - last_m >= METRIC_THROTTLE:
-                        el = now - t_all
-                        tot = total_units + page_units
-                        show_metrics(metrics_ph, {"pages": f"{idx}/{len(images)}", "total": tot,
-                                                  "elapsed": el, "speed": tot / el if el else 0,
-                                                  "unit": unit, "sunit": sunit, "timeouts": timeouts})
-                        last_m = now
+                    if now - last_r >= RENDER_THROTTLE:
+                        render()
+                        last_r = now
+                render(force=True)   # 收尾定版
             except Exception as e:
                 status.error(f"SGLang 串流失敗：{e}")
         else:

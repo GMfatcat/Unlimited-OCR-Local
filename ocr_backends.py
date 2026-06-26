@@ -61,8 +61,10 @@ def _encode_image(image_path):
     return f"data:{mime};base64,{b64}"
 
 
-def sglang_stream(server_url, image_path, image_mode, ngram_window, ngram_size, prompt="document parsing."):
-    """對 SGLang server 串流請求，逐 token yield delta 文字。"""
+def sglang_stream(server_url, image_path, image_mode, ngram_window, ngram_size,
+                  prompt="document parsing.", max_tokens=None):
+    """對 SGLang server 串流請求，逐 token yield delta 文字。
+    max_tokens：server 端上限，讓無限重複的頁面乾淨提早結束（避免長到異常 token 數拖垮/吃滿 GPU）。"""
     from sglang.srt.sampling.custom_logit_processor import (
         DeepseekOCRNoRepeatNGramLogitProcessor,
     )
@@ -81,6 +83,8 @@ def sglang_stream(server_url, image_path, image_mode, ngram_window, ngram_size, 
         "images_config": {"image_mode": image_mode},
         "stream": True,
     }
+    if max_tokens:
+        payload["max_tokens"] = int(max_tokens)
     if ngram_size > 0 and ngram_window > 0:
         payload["custom_logit_processor"] = DeepseekOCRNoRepeatNGramLogitProcessor.to_str()
         payload["custom_params"] = {"ngram_size": ngram_size, "window_size": ngram_window}
@@ -213,8 +217,12 @@ def draw_dets(base_img, dets, font=None):
         color = LABEL_COLORS.get(label, _DEFAULT_COLOR)
         width = 4 if label == "title" else 2
         for (x1, y1, x2, y2) in boxes:
-            px1, py1 = int(x1 / 999 * W), int(y1 / 999 * H)
-            px2, py2 = int(x2 / 999 * W), int(y2 / 999 * H)
+            px1, px2 = sorted((int(x1 / 999 * W), int(x2 / 999 * W)))  # 容錯：座標可能反向
+            py1, py2 = sorted((int(y1 / 999 * H), int(y2 / 999 * H)))
+            px1, px2 = max(0, px1), min(W - 1, px2)
+            py1, py2 = max(0, py1), min(H - 1, py2)
+            if px2 <= px1 or py2 <= py1:   # 退化/零面積框，跳過
+                continue
             draw.rectangle([px1, py1, px2, py2], outline=color, width=width)
             draw.rectangle([px1, py1, px2, py2], fill=color + (28,))
             # label 小標
