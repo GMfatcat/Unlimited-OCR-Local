@@ -8,11 +8,13 @@ Unlimited-OCR 後端邏輯（與 UI 分離，方便測試）。
 """
 import ast
 import base64
+import io
 import json
 import os
 import re
 import subprocess
 import tempfile
+import zipfile
 
 import fitz  # PyMuPDF
 import requests
@@ -93,19 +95,24 @@ def sglang_stream(server_url, image_path, image_mode, ngram_window, ngram_size, 
         stream=True,
     )
     resp.raise_for_status()
-    for raw in resp.iter_lines(decode_unicode=True):
-        if not raw or not raw.startswith("data: "):
-            continue
-        data = raw[len("data: "):]
-        if data == "[DONE]":
-            break
-        try:
-            event = json.loads(data)
-            delta = event["choices"][0].get("delta", {}).get("content", "")
-        except (json.JSONDecodeError, KeyError):
-            continue
-        if delta:
-            yield delta
+    # 用 try/finally：消費端若提早 break（例如逾時），產生器關閉時會走到 finally，
+    # 關閉連線 → SGLang 偵測 client 斷線 → abort 該請求，釋放 GPU 給下一頁。
+    try:
+        for raw in resp.iter_lines(decode_unicode=True):
+            if not raw or not raw.startswith("data: "):
+                continue
+            data = raw[len("data: "):]
+            if data == "[DONE]":
+                break
+            try:
+                event = json.loads(data)
+                delta = event["choices"][0].get("delta", {}).get("content", "")
+            except (json.JSONDecodeError, KeyError):
+                continue
+            if delta:
+                yield delta
+    finally:
+        resp.close()
 
 
 # ---------- det 解析 / 純文字 / 畫框 ----------
@@ -231,3 +238,18 @@ def transformers_run(image_path, image_mode, model_dir=DEFAULT_MODEL_DIR, timeou
     if start in out and end in out:
         return out.split(start, 1)[1].split(end, 1)[0].strip()
     return f"(無法解析輸出)\nstdout tail:\n{out[-2000:]}\nstderr tail:\n{proc.stderr[-2000:]}"
+
+
+def results_to_zip(results):
+    """把每頁結果打包成 ZIP（bytes）。每頁一個資料夾，含疊框圖、原始輸出、純文字。
+    results: [{overlay: PIL, raw: str, clean: str}, ...]"""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for i, r in enumerate(results, 1):
+            folder = f"page_{i:02d}"
+            png = io.BytesIO()
+            r["overlay"].save(png, format="PNG")
+            z.writestr(f"{folder}/overlay.png", png.getvalue())
+            z.writestr(f"{folder}/raw.txt", r.get("raw", ""))
+            z.writestr(f"{folder}/text.txt", r.get("clean", ""))
+    return buf.getvalue()
