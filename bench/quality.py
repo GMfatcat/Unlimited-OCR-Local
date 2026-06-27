@@ -14,6 +14,9 @@ HARD_RUBRIC = ["text_correctness", "table_structure", "formula", "figure_boxes",
 
 def process_doc(entry, corpus_dir, out_root, server_url):
     pdf = os.path.join(corpus_dir, entry.file)
+    if not os.path.exists(pdf):
+        return {"id": entry.id, "category": entry.category, "tier": entry.tier,
+                "pages": 0, "flags": "missing_pdf", "cer": "", "coverage": "", "order_sim": ""}
     out_dir = os.path.join(out_root, entry.id)
     imgs = render_pages(pdf, entry.pages)
     results = [run_page(p, server_url, entry.image_mode, 4096, 30, 1024, 35, out_dir, i + 1)
@@ -73,7 +76,7 @@ def main():
     md = ["# 品質報告", "", "參考線：simple 層 CER<0.15、coverage>0.9 算好（非硬關卡）。", "",
           "| id | 類別 | 層 | 頁 | flags | CER | coverage | order_sim |",
           "|---|---|---|---|---|---|---|---|"]
-    for r in rows:
+    for r in sorted(rows, key=lambda r: (r["category"], r["tier"])):
         md.append("| {id} | {category} | {tier} | {pages} | {flags} | {cer} | {coverage} | {order_sim} |".format(**r))
     hard = [r["id"] for r in rows if r["tier"] != "simple"]
     if hard:

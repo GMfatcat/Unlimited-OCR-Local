@@ -15,7 +15,13 @@ def gpu_mem_mib():
         ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
         capture_output=True, text=True,
     )
-    return int(out.stdout.strip().splitlines()[0])
+    lines = out.stdout.strip().splitlines()
+    if out.returncode != 0 or not lines:
+        return -1
+    try:
+        return int(lines[0])
+    except ValueError:
+        return -1
 
 
 def render_pages(pdf_path, pages, dpi=300):

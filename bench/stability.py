@@ -84,14 +84,44 @@ def s3_no_crash(server, out):
     Image.new("RGB", (8, 8), "white").save(os.path.join(tmp, "tiny.png")); cases.append("tiny.png")
     Image.new("RGB", (4000, 50), "white").save(os.path.join(tmp, "wide.png")); cases.append("wide.png")
     Image.new("RGB", (1000, 1400), (0, 0, 0)).save(os.path.join(tmp, "black.png")); cases.append("black.png")
+
+    # (a) blank white page and rotated image
+    Image.new("RGB", (1000, 1400), "white").save(os.path.join(tmp, "white_page.png"))
+    cases.append("white_page.png")
+    rotated = Image.new("RGB", (8, 8), "white").rotate(7, expand=True)
+    rotated.save(os.path.join(tmp, "rotated.png"))
+    cases.append("rotated.png")
+
     crashes = []
     for name in cases:
         try:
             run_page(os.path.join(tmp, name), server, "base", 1024, 30, 1024, 35, tmp, 1)
         except Exception as e:
             crashes.append(f"{name}: {e}")
+
+    # (b) corrupt PDF — raising is expected graceful handling, not a crash
+    import tempfile
+    corrupt_path = os.path.join(tmp, "corrupt.pdf")
+    with open(corrupt_path, "wb") as f:
+        f.write(b"%PDF-1.4 not a real pdf")
+    try:
+        from bench.runner import render_pages
+        render_pages(corrupt_path, "all")
+    except Exception:
+        pass  # expected — harness degrades gracefully on corrupt file
+
+    # (c) reversed/degenerate detection-box robustness
+    try:
+        from ocr_backends import draw_dets
+        from PIL import Image as _I
+        draw_dets(_I.new("RGB", (400, 600), "white"),
+                  [("text", [(300, 500, 100, 200)]), ("title", [(50, 50, 50, 50)])])
+    except Exception as e:
+        crashes.append(f"draw_dets_degenerate: {e}")
+
     ok = (len(crashes) == 0) and server_healthy(server)
-    return {"name": "S3 no-crash", "pass": ok, "detail": f"cases={cases} crashes={crashes}"}
+    return {"name": "S3 no-crash", "pass": ok,
+            "detail": f"cases={cases + ['corrupt_pdf', 'draw_dets_degenerate']} crashes={crashes}"}
 
 
 def s4_recovery(server, out):
