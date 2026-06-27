@@ -63,7 +63,8 @@ docker run --rm --gpus all \
 | **多階段 slim（現行 `Dockerfile.h100`）** | `*-runtime` | **24.1 GB** |
 
 - 省下的主要是 devel 工具鏈（nvcc/headers）；剩餘體積大頭是 **torch 自帶的 cu128 libs + flashinfer/sgl-kernel（~15–18GB，在 venv 內）**，難再大砍。
-- 轉移：`docker save | gzip` 後 CUDA libs 壓縮率不錯，tar.gz 預估約 **12–15GB**（實際待量）。
+- **轉移檔大小（實測）**：`docker images` 顯示 24.1GB 是「展開後」大小；但 **`docker save` 出來的 tar 只有 ~8.1GB**（OCI tar 內 layer 是已壓縮 blob）。額外 `gzip` 幫助很小（已壓縮）。→ **要 scp 的檔案 ≈ 8GB**。
+  > 小坑：本機 Docker Desktop(經 WSL) 下 `docker save -o <WSL路徑>` 與 `docker save | gzip` 會出問題（docker.exe 解析不到 WSL 路徑 / 管線吐空）；**在你的原生 Linux build 機上 `docker save uocr-h100:slim | gzip > x.tar.gz` 正常**。
 - 注意：本機是 **sm_120**，**未**驗證 `fa3` 與 forward-compat（需 H100）。entrypoint 邏輯（server→health→UI）以 `bash -n` 驗過。
 - 進一步瘦身（如真要）：torch wheel 自帶的 nvidia-* libs 與 base 的 CUDA libs 有重疊，可嘗試去重，但風險高、效益有限。
 
