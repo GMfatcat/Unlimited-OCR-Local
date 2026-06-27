@@ -1,0 +1,8 @@
+- id: academic_unlimited_ocr
+  file: academic/unlimited-ocr.pdf
+  category: academic
+  tier: simple
+  pages: "1-2"
+  image_mode: base
+  gt: pdf_text
+  notes: "born-digital paper, text-heavy first pages"
