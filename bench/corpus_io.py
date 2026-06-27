@@ -37,8 +37,7 @@ def parse_pages(spec, total):
 
 
 def pdf_pseudo_gt(pdf_path, pages):
-    doc = fitz.open(pdf_path)
-    idxs = parse_pages(pages, doc.page_count)
-    text = "\n".join(doc[i].get_text() for i in idxs)
-    doc.close()
+    with fitz.open(pdf_path) as doc:
+        idxs = parse_pages(pages, doc.page_count)
+        text = "\n".join(doc[i].get_text() for i in idxs)
     return text
