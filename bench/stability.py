@@ -4,7 +4,6 @@ import csv
 import os
 import time
 
-import fitz
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
@@ -29,6 +28,8 @@ def s1_longrun(server, out, n_pages):
     pdfs = [os.path.join(REPO, f) for f in ("Unlimited-OCR.pdf", "DeepSeek-OCR.pdf")
             if os.path.exists(os.path.join(REPO, f))]
     pages = _cycle_pages(pdfs, n_pages)
+    if not pages:
+        return {"name": "S1 long-run", "pass": None, "detail": "no source pages (PDFs missing)"}
     rows, t0 = [], time.time()
     for i, img in enumerate(pages):
         r = run_page(img, server, "base", 4096, 30, 1024, 35, os.path.join(out, "_s1"), i + 1)
