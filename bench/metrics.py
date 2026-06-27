@@ -26,8 +26,14 @@ def cer(gt, pred):
     return Levenshtein.distance(g, p) / len(g)
 
 
+# CJK / 假名 / 諺文：這些文字沒有詞間空白，用空白切詞會把整行變成一個巨大 token，
+# 使 coverage / order_sim 失準。改成「CJK 每字一個 token、非 CJK 仍照詞」，對中英混排都有意義。
+_CJK = "一-鿿㐀-䶿豈-﫿぀-ヿ가-힯"
+_TOKEN_RE = re.compile(f"[{_CJK}]|[^\\s{_CJK}]+")
+
+
 def _tokens(text):
-    return [w for w in normalize(text).split(" ") if w]
+    return _TOKEN_RE.findall(normalize(text))
 
 
 def coverage(gt, pred):
@@ -39,4 +45,8 @@ def coverage(gt, pred):
 
 
 def order_insensitive_sim(gt, pred):
-    return fuzz.token_sort_ratio(normalize(gt), normalize(pred)) / 100.0
+    g = " ".join(sorted(_tokens(gt)))
+    p = " ".join(sorted(_tokens(pred)))
+    if not g and not p:
+        return 1.0
+    return fuzz.ratio(g, p) / 100.0
