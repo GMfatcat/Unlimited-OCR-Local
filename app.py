@@ -45,6 +45,7 @@ st.set_page_config(page_title="Unlimited-OCR", layout="wide")
 st.session_state.setdefault("results", [])
 st.session_state.setdefault("metrics", None)
 st.session_state.setdefault("zip_bytes", None)
+st.session_state.setdefault("zip_name", "unlimited_ocr.zip")
 st.session_state.setdefault("pagenum", 1)
 
 
@@ -93,7 +94,7 @@ def help_dialog():
 
 ### 🧭 回看與匯出
 - 📄 頁數少 → 滑桿；頁數多（≥ 16）→ 輸入框 + 前往/上頁/下頁。
-- ⬇️ **下載 ZIP**：每頁一個資料夾，內含 `overlay.png`（疊框圖）、`raw.txt`（原始輸出）、`text.txt`（純文字）。
+- ⬇️ **下載 ZIP**：檔名為 `unlimited_ocr_{檔名}_{時間戳}.zip`；每頁一個資料夾，內含 `overlay.png`（疊框圖）、`raw.txt`（原始輸出）、`text.txt`（純文字）。
         """
     )
 
@@ -243,6 +244,8 @@ def run_ocr():
         show_metrics(metrics_ph, m)
 
     st.session_state.zip_bytes = results_to_zip(st.session_state.results)
+    stem = os.path.splitext(uploaded.name)[0].replace(" ", "_").replace("/", "_")
+    st.session_state.zip_name = f"unlimited_ocr_{stem}_{time.strftime('%Y%m%d_%H%M%S')}.zip"
     msg = f"完成，共 {len(images)} 頁。"
     extra = []
     if timeouts:
@@ -272,7 +275,7 @@ def navigator(n):
         with top[1]:
             if st.session_state.zip_bytes:
                 st.download_button("⬇️ 下載 ZIP", data=st.session_state.zip_bytes,
-                                   file_name="ocr_results.zip", mime="application/zip",
+                                   file_name=st.session_state.zip_name, mime="application/zip",
                                    use_container_width=True)
     return st.session_state.pagenum
 

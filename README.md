@@ -93,7 +93,7 @@ wsl -d Ubuntu-24.04 bash -lc "cd /mnt/c/Users/User/Desktop/project/unlimited-ocr
 - ⏳ **每頁逾時（預設 30s）**：後備防線，超時即中止跳下一頁。
 - ⚠️ 逾時 / 達上限的頁會在**狀態列、純文字結尾、指標列、回看標記、ZIP 內**都標註，方便辨識「結果可能不完整」。
 - 🧭 **頁碼回看**：頁數 < 16 用滑桿；≥ 16 用輸入框 + 前往 / 上頁 / 下頁。
-- ⬇️ **下載 ZIP**：每頁一資料夾，含 `overlay.png`（疊框圖）、`raw.txt`（原始輸出）、`text.txt`（純文字）。
+- ⬇️ **下載 ZIP**：檔名 `unlimited_ocr_{原檔名}_{到秒時間戳}.zip`；每頁一資料夾，含 `overlay.png`（疊框圖）、`raw.txt`（原始輸出）、`text.txt`（純文字）。
 - 📖 **使用說明**：sidebar 的按鈕會跳出寬版說明對話框。
 
 ## 🛡️ 防護機制（避免無限重複迴圈）
