@@ -11,7 +11,9 @@
 | 平台 | 架構 | GPU / 算力 | 最高 CUDA | 備註 |
 |---|---|---|---|---|
 | **A. amd64 主機** | x86_64 | **NVIDIA H100（Hopper, sm_90）** | 12.4（驅動上限） | **此主機無對外網路（air-gapped）**。H100 是資料中心卡、sm_90，`fa3` 原生可用。 |
-| **B. DGX Spark** | **arm64 (aarch64)** | **GB10 Grace-Blackwell，sm_121(a)**，128GB 統一記憶體 | 13.0 | sm_121 只在 **CUDA 13.0+** 支援。**目前只驗證過 vLLM，SGLang 尚未驗證。** |
+| **B. DGX Spark** | **arm64 (aarch64)** | **GB10 Grace-Blackwell，sm_121(a)**，128GB 統一記憶體 | 13.0 | sm_121 只在 **CUDA 13.0+** 支援。**同樣 air-gapped**；目前只驗證過 vLLM，SGLang 尚未驗證。 |
+
+> **兩台目標主機都無對外網路**。統一交付流程：在**有網路的 Linux build 機** `docker build` → `docker save` 成 tar → 拷貝到目標主機 → `docker load`（**無 registry**）。
 
 > 兩者**架構、CUDA、GPU 代次全不同**，無法用單一映像；必須**分平台各自一套**。
 >
@@ -37,7 +39,7 @@
 | ⚡ **SGLang**（**主要目標**，有 continuous batching/併發） | 客製 wheel + flashinfer/sgl-kernel/triton JIT | 🟡 中風險（cu128 stack vs 12.4 驅動 → forward-compat；但 H100/sm_90/`fa3` 本身很成熟） | 🔴 高風險（sm_121a kernel 缺位，連官方/vLLM 都在補；見 §4B） |
 | 🤗 **Transformers**（無併發，**僅保底**） | 只要 `torch + transformers`，**eager attention** | 🟢 低風險 | 🟢 低風險（torch 有 cu130 aarch64；eager 不依賴 sm_121 kernel） |
 
-> **定調**：H100 以 **SGLang 為主**（併發服務）；Transformers 只在 **DGX Spark 萬一 SGLang 不通**時當保底。
+> **定調（已確認）**：H100 **只做 SGLang 單路線**（SGLang 在 H100/sm_90 可行性高）→ **映像不塞 Transformers / 第二個 venv**，更小更單純。Transformers 只在 **DGX Spark 萬一 SGLang 不通**時才當保底。
 
 ## 4. 分平台策略
 
@@ -54,7 +56,8 @@ H100 = Hopper **sm_90**，是這兩個目標裡**最可行**的：`fa3` backend 
 > 2. `docker save` 成 tar → 拷貝到 H100 主機 → `docker load`；
 > 3. 直接 `docker run`。
 > 離線主機端**唯一**的前提是：本來就要有的 **NVIDIA 驅動 + nvidia-container-toolkit**（跑任何 GPU 容器都需要）。
-> forward-compat 的自動掛載需 container-toolkit ≥ 1.17.5 的 `enable-cuda-compat` hook；**若該主機版本較舊，改成在映像內手動設定 `LD_LIBRARY_PATH=/usr/local/cuda/compat:...` 即可**，一樣不需連網。
+> forward-compat 的自動掛載需 container-toolkit ≥ 1.17.5 的 `enable-cuda-compat` hook。
+> **本案主機驅動約 R550、toolkit 同期安裝（很可能早於 1.17.5）→ 預設改用「映像內手動設定 `LD_LIBRARY_PATH=/usr/local/cuda/compat:$LD_LIBRARY_PATH`」**（不依賴主機 toolkit 版本、最穩、一樣不需連網）。實際版本待確認後再定。
 
 **替代方案（避開 forward-compat）**：把整套 stack 對齊 cu124。但客製 wheel 釘 `torch==2.9.1`，而 PyTorch 約在 2.7 之後**不再出 cu124 wheel**，且 flashinfer 0.6.7/sgl-kernel 0.4.1 也是 cu128 build → 對齊 cu124 等於要動 torch 版本與重編 kernel，**比 forward-compat 麻煩很多**。故 **建議走 forward-compat**。
 
@@ -85,9 +88,13 @@ H100 = Hopper **sm_90**，是這兩個目標裡**最可行**的：`fa3` backend 
 - **不要把 6.7GB 權重烤進映像**：以 **volume / bind-mount** 掛入（`-v /host/unlimited-ocr-hf:/models/unlimited-ocr`），映像保持輕量、權重可換。
   （air-gap 主機：權重檔一併拷貝過去掛載即可。）
 - **服務形態：UI + 推論 server 同一容器**（依你的決定，較簡單）。
-  - 容器內以 `.venv-sglang`（已含 streamlit）跑：先 `sglang.launch_server`（10000）→ 等 `/health` → 再 `streamlit run app.py`（8501）。
-  - 用一支 entrypoint 腳本串起來；`docker run -p 8501:8501 -p 10000:10000`（10000 視需要對外）。
-  - UI 的「Transformers 批次」模式若要保留，需第二個 `.venv-transformers`；若 H100 只走 SGLang，可省略以縮小映像。
+  - 容器內**單一 `.venv-sglang`**（含 streamlit）：entrypoint 先 `sglang.launch_server`（10000）→ 等 `/health` → 再 `streamlit run app.py`（8501）。
+  - **不含 Transformers / 第二個 venv**（H100 只走 SGLang）。`app.py` 的「Transformers 批次」分支在無該 venv 時會回錯誤訊息；可在映像版把該選項隱藏。
+  - `docker run -p 8501:8501 -p 10000:10000`（10000 視需要對外）。
+- **建置 / 離線轉移流程（兩台目標通用）**：
+  1. 有網路的 Linux build 機：`docker build -t uocr:h100 .`（把客製 wheel、cu128 stack、`cuda-compat-12-8` 全 bake 進去）。
+  2. `docker save uocr:h100 | gzip > uocr-h100.tar.gz` → 拷貝到目標主機。
+  3. 目標主機：`docker load < uocr-h100.tar.gz` → `docker run ...`（權重以 `-v` 掛入）。
 - **VRAM**：H100（80GB）資源充裕，SGLang continuous batching 可開較大併發；DGX Spark 128GB 統一記憶體更寬鬆。
 - **沿用我們已知的系統前置**（見 `docs/DEVELOPMENT-NOTES.md`）：`-devel` CUDA base 多半已含 nvcc/headers；仍需確認 `libnuma`、`ninja`(PATH)、`TORCH_CUDA_ARCH_LIST`、`CUDA_HOME`、`SGLANG_ENABLE_JIT_DEEPGEMM=0` 等設定。
 
@@ -104,15 +111,14 @@ H100 = Hopper **sm_90**，是這兩個目標裡**最可行**的：`fa3` backend 
 
 ## 7. 動工前必須先確認（Open Questions / 驗證清單）
 
-H100 / 算力 / 是否資料中心卡 / 同容器，皆已確認。剩下：
+已確認：H100/sm_90、air-gapped、build 機+tar+`docker load`（無 registry）、**H100 單 SGLang（不留 Transformers）**、UI+server 同容器。剩下：
 
-1. **H100 離線主機的驅動版本（R5xx）** 與 **nvidia-container-toolkit 版本**？
-   → 決定 forward-compat 是「自動 hook（toolkit ≥1.17.5）」還是「映像內手動 `LD_LIBRARY_PATH`」。兩者都**不需離線主機連網**，只是設定方式不同。
-2. 離線主機的**映像匯入方式**（`docker load` / 私有 registry / containerd）與**權重檔拷貝路徑**慣例？
-3. H100 是否**獨佔**給此服務（決定 `--mem-fraction-static`、最大併發 `--max-running-requests` 等調參）？
-4. （DGX Spark）先做一次**可行性驗證**：官方 `lmsysorg/sglang:spark` 能否在你的 Spark 跑起一般模型？
-5. （DGX Spark，最關鍵）**Unlimited-OCR 的模型檔 + 自訂 logit processor 能否掛到「支援 sm_121 的較新 SGLang」**？還是非得用這顆 dev11416 wheel？→ 決定走「移植」還是「重編 kernel」。
-6. UI 是否需要保留 **Transformers 批次模式**（影響映像要不要塞第二個 venv）？
+1. **（待補）H100 主機的驅動版本（R5xx）與 nvidia-container-toolkit 版本** —— 你之後提供。
+   現況預設：**映像內手動 `LD_LIBRARY_PATH=/usr/local/cuda/compat`**（不依賴主機 toolkit）。版本確認後若 ≥1.17.5 可改用自動 hook。
+2. H100 是否**獨佔**給此服務？（決定 `--mem-fraction-static`、`--max-running-requests` 等併發調參）
+3. 權重在目標主機的**擺放路徑**（給 `-v` 掛載）？
+4. （DGX Spark）先做**可行性驗證**：官方 `lmsysorg/sglang:spark`（別台 build、tar/load）能否在 Spark 跑起一般模型？
+5. （DGX Spark，最關鍵）**Unlimited-OCR 模型檔 + 自訂 logit processor 能否掛到「支援 sm_121 的較新 SGLang」**？還是非得用這顆 dev11416 wheel？→ 決定「移植」還是「重編 kernel」。
 
 ## 8. 建議推進順序（phasing）
 
