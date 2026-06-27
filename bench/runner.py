@@ -19,17 +19,16 @@ def gpu_mem_mib():
 
 
 def render_pages(pdf_path, pages, dpi=300):
-    doc = fitz.open(pdf_path)
-    idxs = parse_pages(pages, doc.page_count)
-    mat = fitz.Matrix(dpi / 72, dpi / 72)
-    out_dir = os.path.join(os.path.dirname(pdf_path), "_pages_" + os.path.basename(pdf_path))
-    os.makedirs(out_dir, exist_ok=True)
-    paths = []
-    for i in idxs:
-        p = os.path.join(out_dir, f"page_{i + 1:04d}.png")
-        doc[i].get_pixmap(matrix=mat).save(p)
-        paths.append(p)
-    doc.close()
+    with fitz.open(pdf_path) as doc:
+        idxs = parse_pages(pages, doc.page_count)
+        mat = fitz.Matrix(dpi / 72, dpi / 72)
+        out_dir = os.path.join(os.path.dirname(pdf_path), "_pages_" + os.path.basename(pdf_path))
+        os.makedirs(out_dir, exist_ok=True)
+        paths = []
+        for i in idxs:
+            p = os.path.join(out_dir, f"page_{i + 1:04d}.png")
+            doc[i].get_pixmap(matrix=mat).save(p)
+            paths.append(p)
     return paths
 
 
