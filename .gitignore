@@ -38,3 +38,8 @@ log/
 Thumbs.db
 .vscode/
 .idea/
+
+# bench corpus + reports (large / generated)
+bench/corpus/**/*.pdf
+bench/corpus/**/*.png
+bench/reports/
