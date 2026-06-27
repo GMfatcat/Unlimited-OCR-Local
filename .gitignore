@@ -46,3 +46,6 @@ bench/reports/
 
 # generated page-render dirs (runner.render_pages writes next to source pdf)
 _pages_*/
+
+# SDD scratch (briefs/reports/diffs/ledger)
+.superpowers/
