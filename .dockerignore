@@ -1,0 +1,16 @@
+# 縮小 build context（權重、輸出、venv、git 等都不進映像）
+unlimited-ocr-hf/
+outputs/
+log/
+.git/
+.venv*/
+**/__pycache__/
+*.pyc
+docs/
+assets/
+*.pdf
+README*.md
+RUN.md
+CONTRIBUTING.md
+LICENSE
+# 注意：wheel/ 與 app.py / ocr_backends.py / docker/ 需保留給 build 使用

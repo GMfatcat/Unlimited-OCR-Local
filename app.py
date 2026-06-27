@@ -12,6 +12,7 @@ Unlimited-OCR Streamlit UI — 即時查看 OCR 效果。
 在 .venv-sglang 內執行：streamlit run app.py
 """
 import subprocess
+import os
 import time
 
 import streamlit as st
@@ -34,6 +35,10 @@ PANE_H = 980
 NAV_BUTTONS_FROM = 16
 RENDER_THROTTLE = 0.15   # 文字 tail / 指標更新最小間隔（秒）：便宜、可頻繁
 IMG_THROTTLE = 0.7       # 疊框圖重畫最小間隔（秒）：每張 PNG 數百 KB，太頻繁會塞爆 websocket、餓死文字更新
+
+# 容器（H100 SGLang-only）模式：隱藏 Transformers 後端選項，server 預設打環境變數指定的位址。
+SGLANG_ONLY = os.environ.get("UOCR_SGLANG_ONLY") == "1"
+DEFAULT_SERVER_URL = os.environ.get("SGLANG_SERVER_URL", "http://127.0.0.1:10000")
 
 st.set_page_config(page_title="Unlimited-OCR", layout="wide")
 
@@ -99,7 +104,10 @@ with st.sidebar:
     if st.button("📖 使用說明", use_container_width=True):
         help_dialog()
     st.header("設定")
-    backend = st.radio("後端", ["SGLang (串流即時)", "Transformers (批次)"])
+    if SGLANG_ONLY:
+        backend = "SGLang (串流即時)"   # 容器模式：固定 SGLang，不顯示後端選項
+    else:
+        backend = st.radio("後端", ["SGLang (串流即時)", "Transformers (批次)"])
     image_mode = st.selectbox("image_mode", ["gundam", "base"],
                               help="單張建議 gundam；多頁/PDF 建議 base")
     dpi = st.slider("PDF DPI", 150, 400, 300, 50)
@@ -111,12 +119,12 @@ with st.sidebar:
                                    help="後備：單頁推理超過此秒數即中止並跳下一頁（max_tokens 是主要防線）")
     show_boxes = st.checkbox("在圖片上畫偵測框", value=True)
     if backend.startswith("SGLang"):
-        server_url = st.text_input("SGLang server", "http://127.0.0.1:10000")
+        server_url = st.text_input("SGLang server", DEFAULT_SERVER_URL)
         st.caption("✅ server 線上" if server_healthy(server_url)
-                   else "⚠️ 未偵測到 server（先啟動 03_start_sglang_server.sh）")
+                   else "⚠️ 未偵測到 server")
         model_dir = DEFAULT_MODEL_DIR
     else:
-        server_url = "http://127.0.0.1:10000"
+        server_url = DEFAULT_SERVER_URL
         model_dir = st.text_input("模型路徑", DEFAULT_MODEL_DIR)
     uploaded = st.file_uploader("上傳圖片或 PDF",
                                 type=["png", "jpg", "jpeg", "webp", "bmp", "pdf"])
