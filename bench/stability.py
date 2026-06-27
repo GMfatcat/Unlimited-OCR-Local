@@ -65,15 +65,18 @@ def s2_loop_guard(server, out):
     if not os.path.exists(pdf):
         return {"name": "S2 loop-guard", "pass": None, "detail": "DeepSeek-OCR.pdf not found (skip)"}
     imgs = render_pages(pdf, "all")
+    mem_before = gpu_mem_mib()
     flagged = []
     for i, img in enumerate(imgs):
         r = run_page(img, server, "base", 4096, 20, 1024, 35, os.path.join(out, "_s2"), i + 1)
         if r.flag:
             flagged.append((i + 1, r.flag, r.tokens))
-    mem_ok = gpu_mem_mib() < 15500
+    # 驗「迴圈頁不洩漏」：掃完整份（含鬼打牆頁）後 GPU mem 不應明顯成長。
+    mem_growth = gpu_mem_mib() - mem_before
+    mem_ok = mem_growth < 800
     ok = len(flagged) > 0 and mem_ok and server_healthy(server)
     return {"name": "S2 loop-guard", "pass": ok,
-            "detail": f"flagged_pages={flagged} mem_ok={mem_ok}"}
+            "detail": f"flagged_pages={flagged} mem_growth={mem_growth}MiB"}
 
 
 def s3_no_crash(server, out):
