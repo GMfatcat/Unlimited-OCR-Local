@@ -43,3 +43,6 @@ Thumbs.db
 bench/corpus/**/*.pdf
 bench/corpus/**/*.png
 bench/reports/
+
+# generated page-render dirs (runner.render_pages writes next to source pdf)
+_pages_*/
