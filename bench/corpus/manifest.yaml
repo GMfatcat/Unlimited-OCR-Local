@@ -1,3 +1,17 @@
+# bench/corpus/manifest.yaml
+#
+# 每個 entry 欄位說明：
+#   id          : 唯一鍵，用於 report 目錄名
+#   file        : 相對於 bench/corpus/ 的路徑
+#   category    : academic | cjk | tables | scanned | patents
+#   tier        : simple（有文字層，可 pseudo-GT）| hard（需人工 GT）
+#   pages       : "all" | "N-M" | "N"  （限制測試頁範圍）
+#   image_mode  : base（預設）
+#   gt          : pdf_text（自動）| manual（人工）
+#   source      : 下載來源 URL（參考用）
+#   notes       : 說明
+
+# ── Academic ──────────────────────────────────────────────────────────────────
 - id: academic_unlimited_ocr
   file: academic/unlimited-ocr.pdf
   category: academic
@@ -6,3 +20,107 @@
   image_mode: base
   gt: pdf_text
   notes: "born-digital paper, text-heavy first pages"
+
+# ── CJK ───────────────────────────────────────────────────────────────────────
+- id: cjk_hk_csb_circulars
+  file: cjk/hk_csb_circulars.pdf
+  category: cjk
+  tier: simple
+  pages: "1-10"
+  image_mode: base
+  gt: pdf_text
+  source: "https://www.csb.gov.hk/tc_chi/publications_stat/publication/files/circulars_2ed.pdf"
+  notes: "HK CSB 政府公文寫作手冊；born-digital 繁中、單欄、文字為主 → pseudo-GT 可用"
+
+- id: cjk_tw_stat_040
+  file: cjk/tw_stat_040.pdf
+  category: cjk
+  tier: hard
+  pages: "1-5"
+  image_mode: base
+  gt: manual
+  source: "https://www.civil.taichung.gov.tw/media/656044/國情統計通報-第040號.pdf"
+  notes: "台灣主計總處 國情統計通報 040；繁中＋統計表＋圖混排 → 需人工 GT"
+
+# ── Tables ────────────────────────────────────────────────────────────────────
+- id: tables_fsoc2025
+  file: tables/fsoc2025.pdf
+  category: tables
+  tier: hard
+  pages: "1-5"
+  image_mode: base
+  gt: manual
+  source: "https://home.treasury.gov/system/files/261/FSOC2025AnnualReport.pdf"
+  notes: "US Treasury FSOC 2025 Annual Report；密集財務表格，檔大（~200 頁）→ 需人工 GT"
+
+- id: tables_us8110241b2
+  file: tables/us8110241b2.pdf
+  category: tables
+  tier: hard
+  pages: "1-5"
+  image_mode: base
+  gt: manual
+  source: "https://patents.google.com/patent/US8110241B2/en"
+  notes: "US8110241B2 專利；含密集表格＋示意圖 → 需人工 GT"
+
+# ── Scanned ───────────────────────────────────────────────────────────────────
+- id: scanned_ia_annual_report
+  file: scanned/ia_annual_report.pdf
+  category: scanned
+  tier: hard
+  pages: "1-5"
+  image_mode: base
+  gt: manual
+  source: "https://archive.org/download/annualreportofse00unit/annualreportofse00unit.pdf"
+  notes: "Internet Archive 掃描報告；archive OCR 隱藏層不可靠 → 需人工 GT"
+
+- id: scanned_us3930271a
+  file: scanned/us3930271a.pdf
+  category: scanned
+  tier: hard
+  pages: "1-5"
+  image_mode: base
+  gt: manual
+  source: "https://patents.google.com/patent/US3930271A/en"
+  notes: "US3930271A（1976 掃描打字稿）；無乾淨文字層、歪斜雜訊 → 需人工 GT"
+
+# ── Patents ───────────────────────────────────────────────────────────────────
+- id: patents_us6556710b2
+  file: patents/us6556710b2.pdf
+  category: patents
+  tier: hard
+  pages: "1-5"
+  image_mode: base
+  gt: manual
+  source: "https://patents.google.com/patent/US6556710B2/en"
+  notes: "US6556710B2；多欄多圖、閱讀順序複雜 → 需人工 GT"
+
+# ── 需使用者自備（無公開穩定直連）────────────────────────────────────────────
+# 請把 PDF 放到對應目錄再取消以下 entry 的注解並補齊欄位。
+#
+# - id: scanned_real_scan
+#   file: scanned/<your_file>.pdf
+#   category: scanned
+#   tier: hard
+#   pages: "1-5"
+#   image_mode: base
+#   gt: manual
+#   notes: "手機翻拍/嚴重歪斜的真實辦公掃描（最硬測項）；使用者自備"
+#
+# - id: cjk_presentation
+#   file: cjk/<your_file>.pdf
+#   category: cjk
+#   tier: hard
+#   pages: "1-5"
+#   image_mode: base
+#   gt: manual
+#   notes: "中文簡報/投影片版面（多欄+圖框）；使用者自備"
+#
+# - id: tables_company_10k
+#   file: tables/<your_file>.pdf
+#   category: tables
+#   tier: hard
+#   pages: "1-5"
+#   image_mode: base
+#   gt: manual
+#   notes: "上市公司 10-K/年報密集表格頁；使用者自備"
