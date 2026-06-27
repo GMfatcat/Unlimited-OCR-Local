@@ -125,6 +125,20 @@ wsl -d Ubuntu-24.04 bash -lc "cd /mnt/c/Users/User/Desktop/project/unlimited-ocr
 
 > 若長時間高強度使用後仍想完全歸零：`wsl -d Ubuntu-24.04 bash -lc "pkill -f sglang.launch_server"`，再重跑 `03_start_sglang_server.sh`。
 
+## 🐳 Docker 部署（H100）
+
+下一階段是容器化部署到 **H100（amd64 / Hopper sm_90）**，做成 **單容器（SGLang server + Streamlit UI）**。
+
+- Dockerfile / entrypoint / 操作說明：[`docker/`](docker/)（多階段 slim 映像，`docker/Dockerfile.h100`、`docker/entrypoint.sh`、`docker/README.md`）。
+- 整體規劃、相依限制與風險：[`docs/DOCKER-DEPLOYMENT-PROPOSAL.md`](docs/DOCKER-DEPLOYMENT-PROPOSAL.md)。
+
+重點：
+- H100 = sm_90 → attention-backend `fa3`（不需 Blackwell 的 triton-JIT）。
+- 主機驅動約 R550（CUDA 12.4）、客製 wheel 為 cu128 → 用 **CUDA forward-compat**（compat libs bake 進映像，主機端零下載；`USE_CUDA_COMPAT` 控制）。
+- 目標主機 **air-gapped**：有網路機器 `docker build` → `docker save` → 拷貝 → `docker load`（無 registry）。
+- 已驗證：映像 build 成功、容器內 import 正常、**轉移 tar ~8GB**（多階段 slim：映像 24.1GB）。**未驗（需 H100）**：`fa3` 與 forward-compat 真機行為。
+- **DGX Spark（arm64 / sm_121）暫不進行**：以 H100 為主，H100 成功即可；Spark 視情況再議。
+
 ## 🗂️ 專案結構
 
 ```
@@ -140,7 +154,11 @@ scripts/
   test_deepseek.py           # 用多頁 PDF 驗證逾時 / 迴圈頁
   ocr_once.py                # 單張圖 Transformers OCR（給 UI 子行程呼叫）
   wsl/                       # WSL 安裝 / 啟動腳本（00–04 + wait_health）
-docs/superpowers/specs/      # 環境決策文件
+docker/                      # H100 容器：Dockerfile.h100 / entrypoint.sh / README
+docs/
+  DEVELOPMENT-NOTES.md       # 開發踩坑記錄
+  DOCKER-DEPLOYMENT-PROPOSAL.md  # Docker 部署規劃（H100 / DGX Spark）
+  superpowers/specs/         # 環境決策文件
 unlimited-ocr-hf/            # 模型權重（已 gitignore）
 README-en.md                 # 上游官方說明（英文）
 ```
