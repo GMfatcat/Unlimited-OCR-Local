@@ -64,15 +64,16 @@
   notes: "US8110241B2 專利；含密集表格＋示意圖 → 需人工 GT"
 
 # ── Scanned ───────────────────────────────────────────────────────────────────
-- id: scanned_ia_annual_report
-  file: scanned/ia_annual_report.pdf
-  category: scanned
-  tier: hard
-  pages: "1-5"
-  image_mode: base
-  gt: manual
-  source: "https://archive.org/download/annualreportofse00unit/annualreportofse00unit.pdf"
-  notes: "Internet Archive 掃描報告；archive OCR 隱藏層不可靠 → 需人工 GT"
+# 下載失敗（archive.org 404，URL 已失效）。換到可用 URL 或自備掃描檔後再取消注解。
+# - id: scanned_ia_annual_report
+#   file: scanned/ia_annual_report.pdf
+#   category: scanned
+#   tier: hard
+#   pages: "1-5"
+#   image_mode: base
+#   gt: manual
+#   source: "https://archive.org/download/annualreportofse00unit/annualreportofse00unit.pdf"
+#   notes: "Internet Archive 掃描報告；archive OCR 隱藏層不可靠 → 需人工 GT"
 
 - id: scanned_us3930271a
   file: scanned/us3930271a.pdf
@@ -94,6 +95,27 @@
   gt: manual
   source: "https://patents.google.com/patent/US6556710B2/en"
   notes: "US6556710B2；多欄多圖、閱讀順序複雜 → 需人工 GT"
+
+# ── 10-k Report ───────────────────────────────────────────────────────────────────
+- id: 10k_nvidia
+  file: 10k/Nvidia-10k.pdf
+  category: 10k
+  tier: hard
+  pages: "35-39"
+  image_mode: base
+  gt: manual
+  source: "https://www.sec.gov/ix?doc=/Archives/edgar/data/0001045810/000104581026000021/nvda-20260125.htm#i82ea215a7c1f4862b6518f1348ddc832_7"
+  notes: "Nvidia-10k；多欄多圖、閱讀順序複雜 → 需人工 GT"
+
+# ── Human（使用者提供的難題：合約/表格/手寫）──────────────────────────────────
+- id: human_docs
+  file: human/human_docs.pdf
+  category: human
+  tier: hard
+  pages: "all"
+  image_mode: base
+  gt: manual
+  notes: "4 張合成：中文合約、中文合約含表×2、英文手寫；難題（手寫/合約表格/翻拍）→ 需人工 GT。單張若想更細可改 image_mode: gundam"
 
 # ── 需使用者自備（無公開穩定直連）────────────────────────────────────────────
 # 請把 PDF 放到對應目錄再取消以下 entry 的注解並補齊欄位。

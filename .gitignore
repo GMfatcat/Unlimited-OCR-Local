@@ -42,6 +42,10 @@ Thumbs.db
 # bench corpus + reports (large / generated)
 bench/corpus/**/*.pdf
 bench/corpus/**/*.png
+bench/corpus/**/*.jpg
+bench/corpus/**/*.jpeg
+bench/corpus/**/*.webp
+bench/corpus/**/*.bmp
 bench/reports/
 
 # generated page-render dirs (runner.render_pages writes next to source pdf)
