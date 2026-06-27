@@ -1,30 +1,33 @@
 # syntax=docker/dockerfile:1
 # =============================================================================
 # Unlimited-OCR — H100 (amd64 / Hopper sm_90) 單容器映像：SGLang server + Streamlit UI
+# 多階段瘦身版：builder(devel, 裝好 venv) → runtime(runtime base, 只複製 venv)
 # =============================================================================
-# 草稿（DRAFT）。版本待校：見每個 ARG 的註解。
-# 設計依據：docs/DOCKER-DEPLOYMENT-PROPOSAL.md
+# 草稿（DRAFT）。版本待校：見每個 ARG 的註解。設計依據：docs/DOCKER-DEPLOYMENT-PROPOSAL.md
 #
 # 要點：
-#  - 客製 SGLang wheel 釘 cu128 kernel；H100 主機驅動僅 ~R550(CUDA 12.4) → 用 CUDA
-#    forward-compat：映像內含 R570 的 compat libs，entrypoint 以 LD_LIBRARY_PATH 啟用。
-#  - H100 = sm_90 → attention-backend 用 fa3（不需 Blackwell 那套 triton-JIT）。
+#  - 客製 SGLang wheel 釘 cu128 kernel；H100 主機驅動僅 ~R550(CUDA 12.4) → CUDA forward-compat
+#    （映像內含 R570 compat libs，entrypoint 以 LD_LIBRARY_PATH 啟用；USE_CUDA_COMPAT 控制）。
+#  - H100 = sm_90 → attention-backend 用 fa3（不需 Blackwell 那套 triton-JIT，故 runtime 段免 nvcc）。
 #  - 只走 SGLang，不含 Transformers / 第二個 venv。
 #  - 權重不烤進映像，runtime 以 -v 掛載到 /models/unlimited-ocr。
+#  - venv 用 uv 自帶可攜 CPython（複製 /root/.local/share/uv/python + venv，runtime 免裝系統 python）。
 # =============================================================================
 
-# --- 待校 ① Base image：cu128 對齊客製 wheel；ubuntu24.04 內含 python3.12；devel 含 nvcc(備援 JIT)
+# --- 待校 base images（builder=devel 供 nvcc/headers；runtime=runtime 體積小）
 ARG CUDA_TAG=12.8.1-cudnn-devel-ubuntu24.04
-FROM nvidia/cuda:${CUDA_TAG}
+ARG RUNTIME_TAG=12.8.1-cudnn-runtime-ubuntu24.04
 
-# --- 待校 ② 版本（與本機可用組合一致；之後依實機校正）
+# =============================== Stage 1：builder ============================
+# 此段指令與單階段版一致 → BuildKit 命中既有快取，不重新下載 torch/kernels。
+FROM nvidia/cuda:${CUDA_TAG} AS builder
+
 ARG PY_VER=3.12
 ARG TORCH_VER=2.9.1
 ARG TORCH_INDEX=https://download.pytorch.org/whl/cu128
 ARG KERNELS_VER=0.11.7
 ARG PYMUPDF_VER=1.27.2.2
 ARG CUDA_COMPAT_PKG=cuda-compat-12-8
-# 客製 SGLang wheel 檔名（放在 build context 的 wheel/ 下）
 ARG SGLANG_WHEEL=sglang-0.0.0.dev11416+g92e8bb79e-py3-none-any.whl
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -32,27 +35,21 @@ ENV DEBIAN_FRONTEND=noninteractive \
     UV_HTTP_TIMEOUT=600 \
     UV_CONCURRENT_DOWNLOADS=2
 
-# --- 系統前置：libnuma(sgl_kernel .so 需要)、build-essential(備援 JIT)、curl/ca-certs；
-#     forward-compat 套件 cuda-compat-12-8（多數 cuda 映像已內含 /usr/local/cuda/compat，這裡明確補裝）
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libnuma1 libnuma-dev build-essential ca-certificates curl git \
         ${CUDA_COMPAT_PKG} \
     && rm -rf /var/lib/apt/lists/*
 
-# --- uv + venv（建在 /opt/uocr/venv）
 ENV PATH=/root/.local/bin:/opt/uocr/venv/bin:/usr/local/cuda/bin:$PATH
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
     && uv venv --python ${PY_VER} /opt/uocr/venv
 
 WORKDIR /opt/uocr
 
-# --- 先裝 torch cu128 stack（layer 快取：較少變動）
 RUN uv pip install --python /opt/uocr/venv/bin/python \
         --index-url ${TORCH_INDEX} \
         torch==${TORCH_VER} torchvision torchaudio==${TORCH_VER}
 
-# --- 裝客製 SGLang wheel + kernels + pymupdf + streamlit
-#     （wheel 先 COPY 進來；torch 已滿足 ==2.9.1 不會被重裝）
 COPY wheel/ /tmp/wheel/
 RUN uv pip install --python /opt/uocr/venv/bin/python \
         "/tmp/wheel/${SGLANG_WHEEL}" \
@@ -61,13 +58,31 @@ RUN uv pip install --python /opt/uocr/venv/bin/python \
         streamlit \
     && rm -rf /tmp/wheel
 
-# --- 應用程式碼（變動較頻繁，放最後）
+# 清掉 __pycache__ 縮一點體積（不影響上面已快取的層）
+RUN find /opt/uocr/venv /root/.local/share/uv/python -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
+
+# =============================== Stage 2：runtime ============================
+FROM nvidia/cuda:${RUNTIME_TAG} AS runtime
+
+ARG CUDA_COMPAT_PKG=cuda-compat-12-8
+ENV DEBIAN_FRONTEND=noninteractive
+
+# runtime 只需：libnuma(sgl_kernel .so)、cuda-compat(forward-compat)、curl(健康檢查)、ca-certs
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libnuma1 ${CUDA_COMPAT_PKG} curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# 複製 uv 可攜 python + venv（venv 的 python symlink 指向前者）
+COPY --from=builder /root/.local/share/uv/python /root/.local/share/uv/python
+COPY --from=builder /opt/uocr/venv /opt/uocr/venv
+
+WORKDIR /opt/uocr
 COPY ocr_backends.py app.py /opt/uocr/
 COPY docker/entrypoint.sh /opt/uocr/entrypoint.sh
 RUN chmod +x /opt/uocr/entrypoint.sh
 
-# --- runtime 環境變數（預設給 H100；可於 docker run -e 覆寫）
-ENV CUDA_HOME=/usr/local/cuda \
+ENV PATH=/opt/uocr/venv/bin:/usr/local/cuda/bin:$PATH \
+    CUDA_HOME=/usr/local/cuda \
     SGLANG_ENABLE_JIT_DEEPGEMM=0 \
     TORCH_CUDA_ARCH_LIST=9.0 \
     MODEL_DIR=/models/unlimited-ocr \
@@ -79,7 +94,7 @@ ENV CUDA_HOME=/usr/local/cuda \
     UOCR_SGLANG_ONLY=1 \
     USE_CUDA_COMPAT=1
 # USE_CUDA_COMPAT=1 給 H100(R550 主機)；驅動已夠新的主機請 -e USE_CUDA_COMPAT=0
-# forward-compat：跳過 nvidia container runtime 對主機 CUDA 版本的硬性檢查（R550 < wheel 的 cu128）
+# 跳過 nvidia container runtime 對主機 CUDA 版本的硬性檢查（R550 < wheel 的 cu128）
 ENV NVIDIA_DISABLE_REQUIRE=1
 
 EXPOSE 8501 10000
