@@ -76,7 +76,9 @@ ENV CUDA_HOME=/usr/local/cuda \
     CONTEXT_LENGTH=32768 \
     SERVER_PORT=10000 \
     UI_PORT=8501 \
-    UOCR_SGLANG_ONLY=1
+    UOCR_SGLANG_ONLY=1 \
+    USE_CUDA_COMPAT=1
+# USE_CUDA_COMPAT=1 給 H100(R550 主機)；驅動已夠新的主機請 -e USE_CUDA_COMPAT=0
 # forward-compat：跳過 nvidia container runtime 對主機 CUDA 版本的硬性檢查（R550 < wheel 的 cu128）
 ENV NVIDIA_DISABLE_REQUIRE=1
 

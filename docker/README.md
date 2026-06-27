@@ -51,6 +51,19 @@ docker run --rm --gpus all \
 | `TORCH_CUDA_ARCH_LIST` | `9.0` | H100 = sm_90 |
 | `HEALTH_TIMEOUT` | `360` | 等 server 就緒秒數 |
 
+## ✅ Build 驗證結果（本機 sm_120，2026-06-27）
+
+- `docker build` **成功**（exit 0）；torch cu128 + 客製 sglang wheel + flashinfer/sgl-kernel + streamlit 全數安裝。
+- 容器內 import 正常：`torch 2.9.1+cu128`、`streamlit 1.58.0`、`sglang dev11416`。
+- ⚠️ **映像 33.5GB**（`devel` base + 完整 CUDA + torch 自帶 cu128 libs + kernels）。對 air-gap 的 tar 轉移偏大。
+- 注意：本機是 **sm_120**，**未**驗證 `fa3` 與 forward-compat（需 H100）。entrypoint 邏輯（server→health→UI）以 `bash -n` 驗過。
+
+### 瘦身建議（之後可做）
+1. **多階段 build**：在 `devel` 裝好 venv，`COPY --from` 到 `*-runtime` base（省去 nvcc/headers ~數 GB）。
+2. 安裝後清掉 `~/.cache/uv`、`apt` lists、`__pycache__`。
+3. 若確認 sm_90/fa3 路徑不需 runtime JIT，可不裝 build 工具鏈。
+   → 預估可降到 ~12–18GB。
+
 ## ⚠️ 動工前待校 / 待確認
 1. **`CUDA_TAG` / `cuda-compat` 版本** 是否與 H100 主機驅動相容（R550 → cu128 forward-compat OK，但確切 tag 待定）。
 2. H100 主機 **nvidia-container-toolkit 版本**：若 ≥ 1.17.5，可改用其 `enable-cuda-compat` hook 取代手動 `LD_LIBRARY_PATH`（二擇一）。

@@ -10,7 +10,13 @@ export PATH="$VENV/bin:/usr/local/cuda/bin:$PATH"
 
 # --- CUDA forward-compat：讓映像內的 R570 compat libs 取代主機 R550 driver libs，
 #     使 cu128 stack 能跑在 12.4 主機上。（主機端零下載；不依賴 container-toolkit 的 hook）
-export LD_LIBRARY_PATH="/usr/local/cuda/compat:${LD_LIBRARY_PATH:-}"
+#     H100/舊驅動主機需要它(USE_CUDA_COMPAT=1)；驅動已夠新的主機應設 0，否則強載舊 compat libs 反而會壞。
+if [ "${USE_CUDA_COMPAT:-1}" = "1" ] && [ -d /usr/local/cuda/compat ]; then
+    export LD_LIBRARY_PATH="/usr/local/cuda/compat:${LD_LIBRARY_PATH:-}"
+    echo "[entrypoint] CUDA forward-compat enabled (LD_LIBRARY_PATH=/usr/local/cuda/compat)"
+else
+    echo "[entrypoint] CUDA forward-compat disabled"
+fi
 
 export CUDA_HOME="${CUDA_HOME:-/usr/local/cuda}"
 export SGLANG_ENABLE_JIT_DEEPGEMM="${SGLANG_ENABLE_JIT_DEEPGEMM:-0}"
