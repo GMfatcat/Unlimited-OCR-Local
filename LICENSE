@@ -1,6 +1,16 @@
 MIT License
 
+Copyright (c) 2026 GMfatcat
+  — original work in this repository: local environment & WSL scripts,
+    the Streamlit UI (app.py, ocr_backends.py), the testing harness (bench/),
+    Docker packaging (docker/), the demo recorder (scripts/record_demo.py),
+    and the documentation (docs/, README.md).
+
 Copyright (c) 2026 Baidu
+  — upstream components from https://github.com/baidu/Unlimited-OCR
+    (e.g. infer.py, README-en.md, and the images under assets/). The
+    Unlimited-OCR model weights are distributed separately under their own
+    license and are not covered here.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
