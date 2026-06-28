@@ -52,7 +52,7 @@ td.dim{width:170px;white-space:nowrap;font-weight:600}
 </nav>
 <div class="wrap"><main>
 <h1>📄 Unlimited-OCR 本地化測試報告</h1>
-<p class="meta">日期 2026-06-28 ｜ 測試環境：Windows + WSL2、消費級顯卡 RTX 5070 Ti、推論引擎 SGLang。本報告同時面向技術與非技術讀者；不熟的名詞可參考最後的「名詞小辭典」。</p>
+<p class="meta">日期 2026-06-28 ｜ 測試環境：Windows + WSL2、消費級顯卡 RTX 5070 Ti、推論引擎 SGLang。<br>本報告同時面向技術與非技術讀者；不熟的名詞可參考最後的「名詞小辭典」。</p>
 
 <h2 id="s0">摘要</h2>
 <div class="note">我們在自己的電腦上把百度開源的文件辨識模型 <b>Unlimited-OCR</b> 跑起來，用一套自製語料系統化測試它「<b>讀得準不準</b>」與「<b>跑得穩不穩</b>」。結論：對<b>乾淨的印刷體與表格文件辨識非常好</b>（英文內文每 100 字約錯 1 個、中文約錯 14 字以內，且多半是比對基準的空白差異而非真錯）；長時間連續跑也<b>不會變慢或當機</b>。主要弱點是<b>印章、掃描雜訊</b>會干擾辨識，以及密集表格頁偶爾<b>重複輸出</b>。</div>
@@ -99,7 +99,7 @@ td.dim{width:170px;white-space:nowrap;font-weight:600}
 <div class="note">📌 <b>觀念釐清</b>
 <p class="pt">① <b>「把多頁合成一張長圖」 → <span class="no">不是</span></b>：每頁各自分開編碼，不是拼成一張長圖。</p>
 <p class="pt">② <b>「視覺 token 在多頁間被瓜分、每頁品質下降」 → <span class="no">不會</span></b>：每頁有自己固定的一份（base ≈ 256 個／頁）；3 頁就是 3×256。</p>
-<p class="pt">③ <b>你底層的直覺其實對</b>：把一整頁壓成約 256 個 token，對<b>很密集</b>的頁面本來就可能不夠細——但這是「<b>壓縮模式</b>」決定的，<span class="yes">與頁數無關</span>。要更高的單頁保真，用 <b>gundam</b>（單張圖、會額外切塊→每塊再 +~100 token）；多頁模式只能用 <b>base</b>（每頁一個全域視圖、不裁切），所以每頁保真比 gundam 單圖低。</p>
+<p class="pt">③ <b>潛在問題</b>：把一整頁壓成約 256 個 token，對<b>很密集</b>的頁面本來就可能不夠細——但這是「<b>壓縮模式</b>」決定的，<span class="yes">與頁數無關</span>。<br>要更高的單頁保真，用 <b>gundam</b>（單張圖、會額外切塊→每塊再 +~100 token）；多頁模式只能用 <b>base</b>（每頁一個全域視圖、不裁切），所以每頁保真比 gundam 單圖低。</p>
 </div>
 <table><tr><th>模式</th><th>每頁視覺 tokens</th><th>一次處理</th><th>用途</th></tr><tr><td><b>gundam（單張圖）</b></td><td>約 256（全域）＋ 每個裁切塊 ~100</td><td>一張圖</td><td>單張密集圖，追求最高保真</td></tr><tr><td><b>base（單張或多頁）</b></td><td>約 256／頁（16× 壓縮、不裁切）</td><td>可一次多頁</td><td>多頁／PDF</td></tr><tr><td><b>我們的部署</b></td><td>base，約 256／頁</td><td>逐頁（每頁一次請求）</td><td>服務化、簡單穩定</td></tr></table>
 <p class="meta">我們的部署採<b>逐頁</b>（每頁送一次請求、base 模式），每頁都拿到完整的 base 視覺預算（~256 tokens），<b>與多頁模式的每頁保真相同</b>，只是各頁獨立、流程更簡單穩定（不需要跨頁的長序列生成）。若未來要更高的單頁保真，可改用 gundam，代價是 token 更多、較慢。</p>
