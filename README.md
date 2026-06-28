@@ -88,7 +88,7 @@ wsl -d Ubuntu-24.04 bash -lc "tr -d '\r' < /mnt/c/Users/User/Desktop/project/unl
 wsl -d Ubuntu-24.04 bash -lc "cd /mnt/c/Users/User/Desktop/project/unlimited-ocr && ~/uocr/.venv-sglang/bin/streamlit run app.py"
 ```
 
-瀏覽器開 **http://localhost:8501**。
+瀏覽器開 **[http://localhost:8501](http://localhost:8501)**。
 
 > 🎥 **錄製即時 OCR 畫面**：server + UI 都起來後，用 Playwright 自動錄製（獨立 venv，只裝 chromium）：
 > `wsl ... ~/uocr/.venv-playwright/bin/python scripts/record_demo.py [pdf] [out_dir]`
