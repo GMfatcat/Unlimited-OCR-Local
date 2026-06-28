@@ -18,8 +18,10 @@ from sglang.srt.sampling.custom_logit_processor import (  # noqa: E402
 )
 
 SERVER = "http://127.0.0.1:10000"
-PDF = "bench/corpus/academic/unlimited-ocr.pdf"
-PAGES = "3-6"
+# CLI: test_multipage.py [pages] [pdf] [mp_max_tokens]
+PAGES = sys.argv[1] if len(sys.argv) > 1 else "3-6"
+PDF = sys.argv[2] if len(sys.argv) > 2 else "bench/corpus/academic/unlimited-ocr.pdf"
+MP_MAX = int(sys.argv[3]) if len(sys.argv) > 3 else 12000
 OUT = "bench/reports/_multipage"
 # base 模式標準防重複參數（同 app.py / infer.py）
 NGRAM_SIZE = 35
@@ -119,7 +121,7 @@ def main():
     try:
         pk2 = Peak()
         pk2.start()
-        mp_raw, mp_n, mp_t = multipage(imgs)
+        mp_raw, mp_n, mp_t = multipage(imgs, max_tokens=MP_MAX)
         mp_peak = pk2.stop()
     except requests.HTTPError as e:
         pk2.stop()

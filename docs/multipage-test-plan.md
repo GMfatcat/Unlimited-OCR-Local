@@ -65,6 +65,32 @@
 - 推測：server 端未完整複製 HF `infer_multi` 的 R-SWA ring-buffer + 專用 `SlidingWindowNoRepeatNgramProcessor`，導致殘留重複。若真要多頁，應走 HF `infer_multi` 路徑而非 SGLang server。
 - 報告的「多頁 vs 逐頁」段可從「程式碼推論」升級為「**實測佐證**」。
 
+---
+
+## 測試 2 結果（頁數壓力，2026-06-28）
+
+同腳本，頁數遞增。多頁皆帶標準 ngram 防重複。
+
+| 頁數 / 文件 | 模式 | CER vs GT ↓ | coverage ↑ | 輸出 tok | 耗時 | speed |
+|---|---|---|---|---|---|---|
+| 4（academic 3–6） | 逐頁 | 0.078 | 0.95 | 3553 | 12.7s | — |
+| | 多頁 | 0.358 | 0.91 | 4155 | 18.6s | 0.68× |
+| 10（academic 3–12） | 逐頁 | 0.170 | 0.90 | 10521 | 40.7s | — |
+| | 多頁 | 0.835 | 0.68 | 14129 | 74.4s | 0.55× |
+| 20（FSOC 1–20） | 逐頁 | 0.095 | 0.98 | 17782 | 68.1s | — |
+| | 多頁 | 0.719 | **0.63** | 11291 | 65.6s | 1.04× |
+
+### 關鍵發現（退化隨頁數加劇）
+- **4 頁**：過度重複（句級重複 2–3 次）→ 輸出偏多、CER 0.36。
+- **10 頁**：開始**漏內容**，coverage 掉到 0.68。
+- **20 頁**：多頁輸出**卡在第 6 頁的目錄（Table of Contents），後半 14 頁完全沒讀** → coverage 僅 0.63、輸出只有逐頁的 ~35%。
+- **無 OOM / 無 context 崩潰**：20 頁仍在預留 KV 池內，VRAM 全程平（idle ~15.6GB 是 `mem-fraction-static 0.8` 預留，與單頁/多頁無關）。
+- **逐頁在所有頁數皆優**：CER 0.09–0.17、coverage 0.90–0.98，速度更快或相當。
+
+### 最終結論
+**多頁模式在這顆 SGLang serving wheel 不可用** —— 頁數一多就丟失 per-page 結構而卡住/漏頁，且更慢。**逐頁部署嚴格更佳**，維持現狀。若日後真需要「一次多頁」，需走 HF `infer_multi` 路徑（含其專用 R-SWA ring-buffer 與 `SlidingWindowNoRepeatNgramProcessor`），不是 OpenAI 相容 server 的多圖請求。
+
 ### 待辦
-- [ ] （可選）測試 2：10/20 頁壓力測（長度上限/OOM/品質是否更糟）。
-- [ ] 把測試 1 數據與結論補進 `docs/Unlimited-OCR-test-report.html`。
+- [x] 測試 1（4 頁逐頁 vs 多頁）。
+- [x] 測試 2（10／20 頁壓力測）。
+- [ ] 把測試 1+2 數據與結論補進 `docs/Unlimited-OCR-test-report.html`（「多頁 vs 逐頁」段：程式碼推論 → 實測佐證）。
