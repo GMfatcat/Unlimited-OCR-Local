@@ -125,6 +125,23 @@ wsl -d Ubuntu-24.04 bash -lc "cd /mnt/c/Users/User/Desktop/project/unlimited-ocr
 
 > 若長時間高強度使用後仍想完全歸零：`wsl -d Ubuntu-24.04 bash -lc "pkill -f sglang.launch_server"`，再重跑 `03_start_sglang_server.sh`。
 
+## 📊 品質與穩定性測試報告
+
+完整測試報告（**自包含 HTML**，含模型機制說明、成果疊框圖、實測數據與名詞小辭典，瀏覽器直接開）：
+**[`docs/Unlimited-OCR-test-report.html`](docs/Unlimited-OCR-test-report.html)**
+測試程式在 [`bench/`](bench/)；規劃見 [`docs/superpowers/specs/2026-06-27-ocr-testing-plan-design.md`](docs/superpowers/specs/2026-06-27-ocr-testing-plan-design.md)。
+> 刻意**不用公開 benchmark**（疑訓練汙染）；改以自建語料：簡單題用 PDF 文字層自動算分、困難題人工評分。
+
+**重點成果：**
+
+- 🎯 **乾淨印刷體／表格辨識極佳**：英文內文字元錯誤率（CER）≈ **1.3%**、中文公文 ≈ 14%（且多為比對基準的空白／特殊符號雜訊，非真錯）。
+- 📋 **困難題（人工 0–5 分）**：表格結構、公式、閱讀順序多數滿分；金融年報密集表格、財報數字幾乎零失誤。
+- ⚠️ **已知弱點**：印章／低品質掃描干擾文字；密集表格頁偶爾重複輸出（觸發 `max_tokens`）；空白區偶判成文字；部分圖框不完整。
+- 🛡️ **穩定性 S1–S4 全數通過**：200 頁長跑速度不退化（251→249 tok/s）、GPU 記憶體不洩漏；鬼打牆頁被生成上限乾淨截斷；7 種怪輸入不當機；中斷後可續。
+- 🔁 **多頁模式實測**：逐頁 base **嚴格優於**多頁一次（多頁更慢、頁數一多會漏頁／重複，20 頁卡在目錄只覆蓋 63%）→ **採逐頁部署**（詳見 [`docs/multipage-test-plan.md`](docs/multipage-test-plan.md)）。
+
+> `mem-fraction-static` 預設已調為 **0.5（本機 ~10GB）／ 0.18（H100 ~14GB）**——單頁 base 服務不需大 KV 池，可用 `MEM_FRACTION` 覆寫。
+
 ## 🐳 Docker 部署（H100）
 
 下一階段是容器化部署到 **H100（amd64 / Hopper sm_90）**，做成 **單容器（SGLang server + Streamlit UI）**。
@@ -154,8 +171,11 @@ scripts/
   test_deepseek.py           # 用多頁 PDF 驗證逾時 / 迴圈頁
   ocr_once.py                # 單張圖 Transformers OCR（給 UI 子行程呼叫）
   wsl/                       # WSL 安裝 / 啟動腳本（00–04 + wait_health）
+bench/                       # 測試 harness：品質軌 / 穩定軌 / 多頁實測 / 報告產生
 docker/                      # H100 容器：Dockerfile.h100 / entrypoint.sh / README
 docs/
+  Unlimited-OCR-test-report.html # 完整測試報告（自包含 HTML）
+  multipage-test-plan.md     # 多頁 vs 逐頁實測
   DEVELOPMENT-NOTES.md       # 開發踩坑記錄
   DOCKER-DEPLOYMENT-PROPOSAL.md  # Docker 部署規劃（H100 / DGX Spark）
   superpowers/specs/         # 環境決策文件
