@@ -39,6 +39,10 @@ Thumbs.db
 .vscode/
 .idea/
 
+# ad-hoc test PDFs at repo root（語料來源記於 bench/corpus/manifest.yaml）
+Attention-is-all-you-need.pdf
+DeepSeek-OCR.pdf
+
 # bench corpus + reports (large / generated)
 bench/corpus/**/*.pdf
 bench/corpus/**/*.png

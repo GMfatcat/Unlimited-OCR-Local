@@ -141,6 +141,18 @@ wsl -d Ubuntu-24.04 bash -lc "cd /mnt/c/Users/User/Desktop/project/unlimited-ocr
 測試程式在 [`bench/`](bench/)；規劃見 [`docs/superpowers/specs/2026-06-27-ocr-testing-plan-design.md`](docs/superpowers/specs/2026-06-27-ocr-testing-plan-design.md)。
 > 刻意**不用公開 benchmark**（疑訓練汙染）；改以自建語料：簡單題用 PDF 文字層自動算分、困難題人工評分。
 
+**測試語料**（7 類共 9 份；完整來源 URL 見 [`bench/corpus/manifest.yaml`](bench/corpus/manifest.yaml)，PDF 本身不入庫）：
+
+| 類別 | 文件 |
+|---|---|
+| 學術論文 | Unlimited-OCR 論文 |
+| 中文 / CJK | 港 CSB《政府公文寫作手冊》、台灣主計總處 國情統計通報 040 |
+| 密集表格 | 美國財政部 FSOC 2025 年報、US 專利 8110241B2 |
+| 掃描件 | US 專利 3930271A（1976 打字稿掃描） |
+| 專利（多圖） | US 專利 6556710B2 |
+| 財報 | NVIDIA 10-K |
+| 合約／手寫 | 含印章合約 + 手寫（使用者自備） |
+
 **重點成果：**
 
 - 🎯 **乾淨印刷體／表格辨識極佳**：英文內文字元錯誤率（CER）≈ **1.3%**、中文公文 ≈ 14%（且多為比對基準的空白／特殊符號雜訊，非真錯）。
