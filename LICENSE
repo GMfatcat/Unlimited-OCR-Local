@@ -8,7 +8,7 @@ Copyright (c) 2026 GMfatcat
 
 Copyright (c) 2026 Baidu
   — upstream components from https://github.com/baidu/Unlimited-OCR
-    (e.g. infer.py, README-en.md, and the images under assets/). The
+    (e.g. infer.py, README-Baidu.md, and the images under assets/). The
     Unlimited-OCR model weights are distributed separately under their own
     license and are not covered here.
 

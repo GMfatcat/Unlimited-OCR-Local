@@ -5,8 +5,12 @@
 <h1 align="center">Unlimited-OCR · 本地執行 + 即時 OCR UI</h1>
 
 <p align="center">
+  <b>中文</b> ｜ <a href="./README-en.md">English</a>
+</p>
+
+<p align="center">
   在 Windows + WSL2 上以 <b>uv</b> 跑通 <b>Transformers</b> 與 <b>SGLang</b> 兩條推論路線，並提供一個 <b>Streamlit 即時 OCR 介面</b>。
-  <br>上游官方說明（英文）見 <a href="./README-en.md">README-en.md</a>。
+  <br>上游官方說明見 <a href="./README-Baidu.md">README-Baidu.md</a>。
 </p>
 
 <p align="center">
@@ -202,17 +206,18 @@ docs/
   DOCKER-DEPLOYMENT-PROPOSAL.md  # Docker 部署規劃（H100 / DGX Spark）
   superpowers/specs/         # 環境決策文件
 unlimited-ocr-hf/            # 模型權重（已 gitignore）
-README-en.md                 # 上游官方說明（英文）
+README-en.md                 # 英文版（本 README 的翻譯）
+README-Baidu.md              # 上游官方說明（英文）
 LICENSE                      # MIT（原創 © GMfatcat；上游元件 © Baidu）
 ```
 
 ## 🙏 致謝 / 引用
 
-模型與方法來自百度 Unlimited-OCR，並感謝 DeepSeek-OCR、PaddleOCR。引用資訊與原始說明見 [README-en.md](./README-en.md)。
+模型與方法來自百度 Unlimited-OCR，並感謝 DeepSeek-OCR、PaddleOCR。引用資訊與原始說明見 [README-Baidu.md](./README-Baidu.md)。
 
 ## 📜 授權 / License
 
 本專案以 **MIT** 授權（見 [`LICENSE`](./LICENSE)）。
 - 本 repo 的**原創部分**（本機環境/腳本、Streamlit UI、測試 harness `bench/`、Docker、文件）© 2026 GMfatcat，MIT。
-- **上游元件**（`infer.py`、`README-en.md`、`assets/` 圖像等）衍生自 [baidu/Unlimited-OCR](https://github.com/baidu/Unlimited-OCR)，亦為 MIT，© 2026 Baidu。
+- **上游元件**（`infer.py`、`README-Baidu.md`、`assets/` 圖像等）衍生自 [baidu/Unlimited-OCR](https://github.com/baidu/Unlimited-OCR)，亦為 MIT，© 2026 Baidu。
 - **模型權重**另依其自身授權發布，不在本 repo 涵蓋範圍。
