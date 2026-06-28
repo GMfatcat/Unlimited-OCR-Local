@@ -44,7 +44,7 @@ docker run --rm --gpus all \
 | 變數 | 預設 | 說明 |
 |---|---|---|
 | `ATTN_BACKEND` | `fa3` | H100 用 fa3 |
-| `MEM_FRACTION` | `0.85` | `--mem-fraction-static` |
+| `MEM_FRACTION` | `0.18` | `--mem-fraction-static`；單頁 base 只需小 KV 池，0.18 在 80GB H100 ≈ 14GB。獨佔且要高併發可調高 |
 | `MAX_RUNNING_REQUESTS` | （空） | 獨佔 H100 可設較大併發 |
 | `CONTEXT_LENGTH` | `32768` | |
 | `MODEL_DIR` | `/models/unlimited-ocr` | 掛載點 |

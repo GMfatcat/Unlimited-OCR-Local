@@ -102,7 +102,26 @@ td.dim{width:170px;white-space:nowrap;font-weight:600}
 <p class="pt">③ <b>潛在問題</b>：把一整頁壓成約 256 個 token，對<b>很密集</b>的頁面本來就可能不夠細——但這是「<b>壓縮模式</b>」決定的，<span class="yes">與頁數無關</span>。<br>要更高的單頁保真，用 <b>gundam</b>（單張圖、會額外切塊→每塊再 +~100 token）；多頁模式只能用 <b>base</b>（每頁一個全域視圖、不裁切），所以每頁保真比 gundam 單圖低。</p>
 </div>
 <table><tr><th>模式</th><th>每頁視覺 tokens</th><th>一次處理</th><th>用途</th></tr><tr><td><b>gundam（單張圖）</b></td><td>約 256（全域）＋ 每個裁切塊 ~100</td><td>一張圖</td><td>單張密集圖，追求最高保真</td></tr><tr><td><b>base（單張或多頁）</b></td><td>約 256／頁（16× 壓縮、不裁切）</td><td>可一次多頁</td><td>多頁／PDF</td></tr><tr><td><b>我們的部署</b></td><td>base，約 256／頁</td><td>逐頁（每頁一次請求）</td><td>服務化、簡單穩定</td></tr></table>
-<p class="meta">我們的部署採<b>逐頁</b>（每頁送一次請求、base 模式），每頁都拿到完整的 base 視覺預算（~256 tokens），<b>與多頁模式的每頁保真相同</b>，只是各頁獨立、流程更簡單穩定（不需要跨頁的長序列生成）。若未來要更高的單頁保真，可改用 gundam，代價是 token 更多、較慢。</p>
+<p class="meta">我們的部署採<b>逐頁</b>（每頁送一次請求、base 模式），每頁都拿到完整的 base 視覺預算（~256 tokens），<b>理論上與多頁模式有相同的每頁視覺預算</b>（但實測多頁在此 serving 路徑會退化，見下），各頁獨立、流程更簡單穩定。若未來要更高的單頁保真，可改用 gundam，代價是 token 更多、較慢。</p>
+
+<h4>實測佐證（測試 1 + 2）</h4>
+<p>以上機制為程式碼推論；我們進一步<b>實測</b>逐頁 base vs 多頁一次 base（academic 與 FSOC、base 模式、皆帶標準防重複），數據如下：</p>
+<table>
+<tr><th>頁數</th><th>模式</th><th>CER vs GT ↓</th><th>coverage ↑</th><th>耗時</th><th>相對速度</th></tr>
+<tr><td rowspan="2">4</td><td>逐頁</td><td>0.078</td><td>0.95</td><td>12.7s</td><td>基準</td></tr>
+<tr><td>多頁</td><td>0.358</td><td>0.91</td><td>18.6s</td><td>0.68×</td></tr>
+<tr><td rowspan="2">10</td><td>逐頁</td><td>0.170</td><td>0.90</td><td>40.7s</td><td>基準</td></tr>
+<tr><td>多頁</td><td>0.835</td><td>0.68</td><td>74.4s</td><td>0.55×</td></tr>
+<tr><td rowspan="2">20</td><td>逐頁</td><td>0.095</td><td>0.98</td><td>68.1s</td><td>基準</td></tr>
+<tr><td>多頁</td><td>0.719</td><td>0.63</td><td>65.6s</td><td>1.04×</td></tr>
+</table>
+<div class="note">📊 <b>實測結論：多頁模式在此 SGLang serving 路徑上不可用，逐頁嚴格更佳。</b>
+<p class="pt">① <b>沒有防重複會災難爆走</b>：不帶 no-repeat ngram 時，多頁陷入無限重複、打滿 max_tokens（CER 3.27、輸出 4× 長）。</p>
+<p class="pt">② <b>退化隨頁數加劇</b>：4 頁過度重複 → 10 頁開始漏內容（cov 0.68）→ 20 頁<b>卡在第 6 頁的目錄、後半 14 頁完全沒讀</b>（cov 0.63、輸出僅逐頁的 35%）。</p>
+<p class="pt">③ <b>沒有速度優勢</b>：多頁更慢或相當（0.55–1.04×），每 token 也更慢（每步要注意全部頁的視覺 tokens）。</p>
+<p class="pt">④ <b>無 OOM</b>：20 頁仍在預留 KV 池內，VRAM 全程平。</p>
+<p class="pt">⑤ <b>原因</b>：SGLang server 未完整複製 HF <code>infer_multi</code> 的 R-SWA ring-buffer 與專用滑動視窗防重複處理器；真要多頁需走 HF <code>infer_multi</code>，而非 OpenAI 相容 server 的多圖請求。</p>
+</div>
 
 <h2 id="s2">2. 實驗目的</h2>
 <p>在正式把模型容器化、部署到伺服器（H100）之前，先回答兩個問題：</p>
@@ -184,7 +203,7 @@ Humans are remarkably adept at seemingly straightforward long-horizon tasks: tra
 <li><b>乾淨印刷體與表格文件：辨識很好、可放心使用。</b>英文內文字元錯誤率約 1.3%、中文約 14%（且多為基準雜訊）；表格結構、公式、閱讀順序多數滿分。</li>
 <li><b>服務穩定可靠。</b>200 頁長跑速度不退化、記憶體不洩漏；會無限重複的頁面被「生成上限」乾淨擋住；對怪輸入不當機、中斷後可續。</li>
 <li><b>已知弱點。</b>印章與低品質掃描會干擾文字；密集表格頁偶爾重複輸出（觸發生成上限，代表該頁可能不完整）；空白區偶判成文字；部分方框框不完整。</li>
-<li><b>部署建議。</b>優先用於印刷體／表格類文件；面對印章、劣質掃描建議先做影像前處理或安排人工複核；上線後監看「達上限／逾時」標記的頁面；對單張密集圖若要更高保真可改用 gundam 模式。</li>
+<li><b>部署建議。</b>優先用於印刷體／表格類文件；面對印章、劣質掃描建議先做影像前處理或安排人工複核；上線後監看「達上限／逾時」標記的頁面；對單張密集圖若要更高保真可改用 gundam 模式；多頁一次推論經實測不可用（會漏頁／重複），維持逐頁。</li>
 </ul></div>
 
 <h2 id="gl">名詞小辭典</h2>

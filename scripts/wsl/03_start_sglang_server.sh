@@ -19,6 +19,9 @@ export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-12.0}"
 REPO="/mnt/c/Users/User/Desktop/project/unlimited-ocr"
 MODEL_DIR="$REPO/unlimited-ocr-hf"
 ATTN_BACKEND="${ATTN_BACKEND:-fa3}"
+# KV cache 靜態預留比例。單頁 base 服務不需大池：0.5 在 16GB 卡 ≈ 10GB，足夠跑單頁 base。
+# 換 GPU 請覆寫 MEM_FRACTION（例：80GB H100 設 0.18 ≈ 14GB；不要沿用 0.8，會吃掉 64GB）。
+MEM_FRACTION="${MEM_FRACTION:-0.5}"
 
 echo "Starting SGLang server with attention-backend=$ATTN_BACKEND"
 exec "$PY" -m sglang.launch_server \
@@ -26,7 +29,7 @@ exec "$PY" -m sglang.launch_server \
     --served-model-name Unlimited-OCR \
     --attention-backend "$ATTN_BACKEND" \
     --page-size 1 \
-    --mem-fraction-static 0.8 \
+    --mem-fraction-static "$MEM_FRACTION" \
     --context-length 32768 \
     --enable-custom-logit-processor \
     --disable-overlap-schedule \

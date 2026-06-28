@@ -93,4 +93,9 @@
 ### 待辦
 - [x] 測試 1（4 頁逐頁 vs 多頁）。
 - [x] 測試 2（10／20 頁壓力測）。
-- [ ] 把測試 1+2 數據與結論補進 `docs/Unlimited-OCR-test-report.html`（「多頁 vs 逐頁」段：程式碼推論 → 實測佐證）。
+- [x] 把測試 1+2 數據與結論補進 `docs/Unlimited-OCR-test-report.html`（「多頁 vs 逐頁」段：程式碼推論 → 實測佐證）。
+
+### 附帶調整（2026-06-28）
+- `mem-fraction-static` 由 0.8 參數化、降低（單頁 base 不需大 KV 池）：
+  - 本機 `scripts/wsl/03_start_sglang_server.sh` 與 `infer.py` 預設 **0.5**（16GB 卡 → idle **~10GB**，已驗證單頁 base 正常、CER 0.0068）。
+  - Docker / H100（`docker/entrypoint.sh`、`Dockerfile.h100`、`docker/README.md`）預設 **0.18**（80GB H100 → ~14GB）。皆可用 `MEM_FRACTION` 覆寫。
