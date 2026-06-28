@@ -85,6 +85,10 @@ wsl -d Ubuntu-24.04 bash -lc "cd /mnt/c/Users/User/Desktop/project/unlimited-ocr
 
 瀏覽器開 **http://localhost:8501**。
 
+> 🎥 **錄製即時 OCR 畫面**：server + UI 都起來後，用 Playwright 自動錄製（獨立 venv，只裝 chromium）：
+> `wsl ... ~/uocr/.venv-playwright/bin/python scripts/record_demo.py [pdf] [out_dir]`
+> 預設用 `assets/demo_3pages.pdf`、輸出 `outputs/demo/*.webm`（內附轉 mp4/gif 的 ffmpeg 指令）。
+
 ### UI 功能
 - 🟦 **即時偵測框**：每解析出一個 `<|det|>` 框就畫到左欄圖片上（`title` 紅粗框，其餘依類別配色）。
 - 📝 **純文字 + 自動捲動**：右欄只顯示去標記的純文字，終端機式 tail 永遠停在最新、跟著掃描走。
@@ -170,6 +174,7 @@ scripts/
   test_timeout.py            # 逾時中止 + server 復原測試
   test_deepseek.py           # 用多頁 PDF 驗證逾時 / 迴圈頁
   ocr_once.py                # 單張圖 Transformers OCR（給 UI 子行程呼叫）
+  record_demo.py             # Playwright 自動錄製 UI 即時 OCR 畫面 → .webm
   wsl/                       # WSL 安裝 / 啟動腳本（00–04 + wait_health）
 bench/                       # 測試 harness：品質軌 / 穩定軌 / 多頁實測 / 報告產生
 docker/                      # H100 容器：Dockerfile.h100 / entrypoint.sh / README
