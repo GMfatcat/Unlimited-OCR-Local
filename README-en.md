@@ -270,7 +270,7 @@ Useful options:
 
 ## Visualization
 
-<img src="assets/long-horizon-ocr.gif" width="100%" alt="Long-horizon OCR demo" />
+See the long-horizon OCR demo in the [upstream repository](https://github.com/baidu/Unlimited-OCR) (the large demo GIF is not bundled in this fork to keep it lightweight).
 
 ## Acknowledgement
 
