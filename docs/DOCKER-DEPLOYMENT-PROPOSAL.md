@@ -58,7 +58,7 @@ H100 = Hopper **sm_90**，是這兩個目標裡**最可行**的：`fa3` backend 
 > 3. 直接 `docker run`。
 > 離線主機端**唯一**的前提是：本來就要有的 **NVIDIA 驅動 + nvidia-container-toolkit**（跑任何 GPU 容器都需要）。
 > forward-compat 的自動掛載需 container-toolkit ≥ 1.17.5 的 `enable-cuda-compat` hook。
-> **本案主機驅動約 R550、toolkit 同期安裝（很可能早於 1.17.5）→ 預設改用「映像內手動設定 `LD_LIBRARY_PATH=/usr/local/cuda/compat:$LD_LIBRARY_PATH`」**（不依賴主機 toolkit 版本、最穩、一樣不需連網）。實際版本待確認後再定。
+> **已確認（2026-07-02）：主機 driver 550.127.08、nvidia-container-toolkit 1.17.2-1（< 1.17.5，無自動 hook）→ 採用「映像內手動 `LD_LIBRARY_PATH=/usr/local/cuda/compat:$LD_LIBRARY_PATH`」**（不依賴主機 toolkit 版本、最穩、一樣不需連網）。R550 遠高於 CUDA 12.8 compat 的 R525 下限，forward-compat 相容性確認。
 
 **替代方案（避開 forward-compat）**：把整套 stack 對齊 cu124。但客製 wheel 釘 `torch==2.9.1`，而 PyTorch 約在 2.7 之後**不再出 cu124 wheel**，且 flashinfer 0.6.7/sgl-kernel 0.4.1 也是 cu128 build → 對齊 cu124 等於要動 torch 版本與重編 kernel，**比 forward-compat 麻煩很多**。故 **建議走 forward-compat**。
 
@@ -114,8 +114,7 @@ H100 = Hopper **sm_90**，是這兩個目標裡**最可行**的：`fa3` backend 
 
 已確認：H100/sm_90、air-gapped、build 機+tar+`docker load`（無 registry）、**H100 單 SGLang（不留 Transformers）**、UI+server 同容器。剩下：
 
-1. **（待補）H100 主機的驅動版本（R5xx）與 nvidia-container-toolkit 版本** —— 你之後提供。
-   現況預設：**映像內手動 `LD_LIBRARY_PATH=/usr/local/cuda/compat`**（不依賴主機 toolkit）。版本確認後若 ≥1.17.5 可改用自動 hook。
+1. ~~（待補）H100 主機的驅動版本與 nvidia-container-toolkit 版本~~ **已確認（2026-07-02）：driver 550.127.08 / CUDA 12.4 上限、nvidia-container-toolkit 1.17.2-1**。1.17.2 < 1.17.5 → 無自動 hook → 定案用**映像內手動 `LD_LIBRARY_PATH=/usr/local/cuda/compat`**。cu128 + cuda-compat-12-8 forward-compat 相容性確認。
 2. H100 是否**獨佔**給此服務？（決定 `--mem-fraction-static`、`--max-running-requests` 等併發調參）
 3. 權重在目標主機的**擺放路徑**（給 `-v` 掛載）？
 4. （DGX Spark）先做**可行性驗證**：官方 `lmsysorg/sglang:spark`（別台 build、tar/load）能否在 Spark 跑起一般模型？

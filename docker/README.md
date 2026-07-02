@@ -68,8 +68,11 @@ docker run --rm --gpus all \
 - 注意：本機是 **sm_120**，**未**驗證 `fa3` 與 forward-compat（需 H100）。entrypoint 邏輯（server→health→UI）以 `bash -n` 驗過。
 - 進一步瘦身（如真要）：torch wheel 自帶的 nvidia-* libs 與 base 的 CUDA libs 有重疊，可嘗試去重，但風險高、效益有限。
 
-## ⚠️ 動工前待校 / 待確認
-1. **`CUDA_TAG` / `cuda-compat` 版本** 是否與 H100 主機驅動相容（R550 → cu128 forward-compat OK，但確切 tag 待定）。
-2. H100 主機 **nvidia-container-toolkit 版本**：若 ≥ 1.17.5，可改用其 `enable-cuda-compat` hook 取代手動 `LD_LIBRARY_PATH`（二擇一）。
-3. **尚未實際 build/run 驗證**（本機是 sm_120，可先驗證映像/啟動腳本/UI 串接邏輯，但 fa3 與 forward-compat 必須在 H100 上才能真正驗證）。
-4. 映像體積：目前用 `devel` base（含 nvcc 備援）。若 sm_90 路徑確認不需 runtime JIT，可改 `runtime` base 縮小體積。
+## H100 主機環境（已確認 2026-07-02）
+- driver **550.127.08** / CUDA **12.4** 上限 → cu128 stack 需 forward-compat；H100 是資料中心卡，`cuda-compat-12-8` 支援良好（R550 遠高於 CUDA 12.8 compat 的 R525 下限）。→ `CUDA_TAG=12.8.1` + `cuda-compat-12-8` **確認相容**。
+- nvidia-container-toolkit **1.17.2-1**（< 1.17.5）→ **無** `enable-cuda-compat` 自動 hook → 沿用映像內**手動 `LD_LIBRARY_PATH=/usr/local/cuda/compat`**（entrypoint `USE_CUDA_COMPAT=1`，預設值即正確）。
+
+## ⚠️ 仍待實機驗證
+1. **尚未在真正的 H100 上 build/run**：本機是 sm_120，只驗過 build/import 與 entrypoint `bash -n`。`fa3` 與 forward-compat **必須在 H100 上才能真正驗證**。
+2. **air-gap 下的 HF Hub 抓取**：`kernels` / transformers 首次使用**可能**嘗試連 HF Hub。H100 完全離線，若觸發會卡在網路 timeout。建議在映像加 `HF_HUB_OFFLINE=1` + `TRANSFORMERS_OFFLINE=1`（快速失敗、暴露是否有東西需預先 bake）。smoke test 時確認。
+3. 映像體積：現為多階段 slim（`runtime` base，24.1GB / tar ≈8GB）。sm_90 走 `fa3` 不需 runtime JIT nvcc，故 runtime 段免 devel，已是合理下限。

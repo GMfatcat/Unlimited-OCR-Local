@@ -3,7 +3,11 @@
 # Unlimited-OCR — H100 (amd64 / Hopper sm_90) 單容器映像：SGLang server + Streamlit UI
 # 多階段瘦身版：builder(devel, 裝好 venv) → runtime(runtime base, 只複製 venv)
 # =============================================================================
-# 草稿（DRAFT）。版本待校：見每個 ARG 的註解。設計依據：docs/DOCKER-DEPLOYMENT-PROPOSAL.md
+# 草稿（DRAFT）。設計依據：docs/DOCKER-DEPLOYMENT-PROPOSAL.md
+# H100 主機環境已確認（2026-07-02）：driver 550.127.08 / CUDA 12.4 上限、
+#   nvidia-container-toolkit 1.17.2-1（< 1.17.5 → 無自動 cuda-compat hook）。
+#   → cu128 stack + cuda-compat-12-8 + entrypoint 手動 LD_LIBRARY_PATH 為正確組合（下方 ARG/ENV 已定）。
+#   仍待：實機在 H100 上 build/run 驗證 fa3 與 forward-compat（本機是 sm_120，只驗過 build/import）。
 #
 # 要點：
 #  - 客製 SGLang wheel 釘 cu128 kernel；H100 主機驅動僅 ~R550(CUDA 12.4) → CUDA forward-compat
@@ -14,7 +18,8 @@
 #  - venv 用 uv 自帶可攜 CPython（複製 /root/.local/share/uv/python + venv，runtime 免裝系統 python）。
 # =============================================================================
 
-# --- 待校 base images（builder=devel 供 nvcc/headers；runtime=runtime 體積小）
+# --- base images（builder=devel 供 nvcc/headers；runtime=runtime 體積小）
+#     cu128 對齊客製 wheel；配 cuda-compat-12-8 可 forward-compat 到 H100 的 R550/CUDA 12.4（已確認相容）。
 ARG CUDA_TAG=12.8.1-cudnn-devel-ubuntu24.04
 ARG RUNTIME_TAG=12.8.1-cudnn-runtime-ubuntu24.04
 
@@ -92,7 +97,12 @@ ENV PATH=/opt/uocr/venv/bin:/usr/local/cuda/bin:$PATH \
     SERVER_PORT=10000 \
     UI_PORT=8501 \
     UOCR_SGLANG_ONLY=1 \
-    USE_CUDA_COMPAT=1
+    USE_CUDA_COMPAT=1 \
+    HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1
+# air-gap 硬化：主機完全離線，禁止 huggingface_hub / transformers / kernels 連 HF Hub。
+# 有東西想抓時「快速失敗」（而非卡網路 timeout）→ smoke test 立刻暴露是否有 kernel 需預先 bake。
+# 權重以 -v 掛本機路徑（非 repo id），不受此影響。
 # USE_CUDA_COMPAT=1 給 H100(R550 主機)；驅動已夠新的主機請 -e USE_CUDA_COMPAT=0
 # 跳過 nvidia container runtime 對主機 CUDA 版本的硬性檢查（R550 < wheel 的 cu128）
 ENV NVIDIA_DISABLE_REQUIRE=1
