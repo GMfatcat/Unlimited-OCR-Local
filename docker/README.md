@@ -40,6 +40,27 @@ docker run --rm --gpus all \
 ```
 瀏覽器開 `http://<H100>:8501`。
 
+### 多卡主機選卡（⚠️ 實測經驗）
+H100 兩卡主機上實測：docker `--gpus '"device=N"'` 與在 `python3` 前設 `CUDA_VISIBLE_DEVICES` **都選不動卡**。
+原因：`CUDA_VISIBLE_DEVICES` 會被 SGLang 每個 worker 依 `base_gpu_id` 改寫（預設 0）→ 永遠落在物理 GPU 0；
+`--gpus device=N` 則疑似被 base image 的 `NVIDIA_VISIBLE_DEVICES=all` + 舊版 toolkit + `NVIDIA_DISABLE_REQUIRE=1` 交互蓋掉。
+
+**可靠做法：容器一律 `--gpus all`，用 `-e BASE_GPU_ID=N` 在 app 層選卡。**
+```bash
+# 跑在 GPU 1
+docker run --rm --gpus all -e BASE_GPU_ID=1 \
+  -p 8501:8501 -p 10000:10000 \
+  -v /path/on/host/unlimited-ocr-hf:/models/unlimited-ocr:ro \
+  uocr-h100:draft
+
+# 兩張卡各跑一個獨立實例（不同 port）＝最佳總吞吐，比 TP 好維運
+docker run -d --gpus all -e BASE_GPU_ID=0 -p 8501:8501 -p 10000:10000 -v ...:/models/unlimited-ocr:ro uocr-h100:draft
+docker run -d --gpus all -e BASE_GPU_ID=1 -p 8502:8501 -p 10001:10000 -v ...:/models/unlimited-ocr:ro uocr-h100:draft
+
+# 想「試看看」TP=2 慢多少（不建議正式用；單頁 OCR 跨卡 NCCL 反而拖延遲）
+docker run --rm --gpus all -e TP_SIZE=2 -p 8501:8501 -p 10000:10000 -v ...:/models/unlimited-ocr:ro uocr-h100:draft
+```
+
 ### 常用可覆寫環境變數（`-e`）
 | 變數 | 預設 | 說明 |
 |---|---|---|
@@ -50,8 +71,18 @@ docker run --rm --gpus all \
 | `MODEL_DIR` | `/models/unlimited-ocr` | 掛載點 |
 | `TORCH_CUDA_ARCH_LIST` | `9.0` | H100 = sm_90 |
 | `HEALTH_TIMEOUT` | `360` | 等 server 就緒秒數 |
+| `BASE_GPU_ID` | `0` | 多卡主機選卡（配 `--gpus all`）；見上方「多卡主機選卡」 |
+| `TP_SIZE` | `1` | 張量平行度；單頁 OCR 不建議 >1，僅供實驗 TP=2 |
+| `GPU_ID_STEP` | `1` | TP 時卡間索引步進 |
 
-## ✅ Build 驗證結果（本機 sm_120，2026-06-27）
+## ⚠️ 更新：H100 實機推翻 slim(runtime base) 路線（2026-07-04）
+下方「本機 sm_120」的 slim 量測是有效歷史紀錄，但**在真正的 H100 上 slim(runtime base) 版跑不起來**：
+sm_90 路徑 SGLang(dev11416) 的 fused RoPE 走 tvm-ffi **runtime JIT**，第一次 forward 會即時用 nvcc 編 kernel，
+`-runtime` base 無 nvcc → `nvcc: not found` → scheduler 崩。
+**現行 `Dockerfile.h100` 已改回 devel-runtime base（含 nvcc/headers + build-essential），映像回到 ~33GB 級**，
+這是 sm_90 runtime JIT 的必要代價。下方 24.1GB slim 數字**不再是現行值**。
+
+## ✅ Build 驗證結果（本機 sm_120，2026-06-27，歷史紀錄）
 
 - `docker build` **成功**（exit 0）；torch cu128 + 客製 sglang wheel + flashinfer/sgl-kernel + streamlit 全數安裝。
 - 容器內 import 正常：`torch 2.9.1+cu128`、`streamlit 1.58.0`、`sglang dev11416`（slim、draft 皆驗過）。
@@ -75,4 +106,5 @@ docker run --rm --gpus all \
 ## ⚠️ 仍待實機驗證
 1. **尚未在真正的 H100 上 build/run**：本機是 sm_120，只驗過 build/import 與 entrypoint `bash -n`。`fa3` 與 forward-compat **必須在 H100 上才能真正驗證**。
 2. **air-gap 下的 HF Hub 抓取**：`kernels` / transformers 首次使用**可能**嘗試連 HF Hub。H100 完全離線，若觸發會卡在網路 timeout。建議在映像加 `HF_HUB_OFFLINE=1` + `TRANSFORMERS_OFFLINE=1`（快速失敗、暴露是否有東西需預先 bake）。smoke test 時確認。
-3. 映像體積：現為多階段 slim（`runtime` base，24.1GB / tar ≈8GB）。sm_90 走 `fa3` 不需 runtime JIT nvcc，故 runtime 段免 devel，已是合理下限。
+3. ~~映像體積：現為多階段 slim（`runtime` base，24.1GB / tar ≈8GB）。sm_90 走 `fa3` 不需 runtime JIT nvcc，故 runtime 段免 devel。~~
+   → **已被 H100 實機推翻**（見本節開頭）：sm_90 仍有 fused RoPE runtime JIT 需 nvcc，runtime 段必須 devel base。

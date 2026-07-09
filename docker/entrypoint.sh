@@ -33,12 +33,21 @@ UI_PORT="${UI_PORT:-8501}"
 MAX_RUNNING_REQUESTS="${MAX_RUNNING_REQUESTS:-}"   # 留空＝SGLang 自動；獨佔 H100 可設較大值
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-360}"            # 等 server 就緒最長秒數
 
+# --- GPU 選卡 / 平行度 -------------------------------------------------------
+# ⚠️ 實測（H100 2卡）：docker `--gpus '"device=N"'` 與 `CUDA_VISIBLE_DEVICES` 都選不動卡。
+#   CUDA_VISIBLE_DEVICES 會被 SGLang 每個 worker 用 base_gpu_id 改寫 → 永遠落在物理 GPU 0。
+#   唯一可靠做法：容器用 `--gpus all`（看得到全部卡），再靠 --base-gpu-id 在 app 層挑卡。
+BASE_GPU_ID="${BASE_GPU_ID:-0}"    # 選哪張卡（容器可見卡集合內的索引）。單卡選卡改這個
+TP_SIZE="${TP_SIZE:-1}"            # 張量平行度；預設 1（單卡）。單頁 OCR 不建議 >1，僅供實驗
+GPU_ID_STEP="${GPU_ID_STEP:-1}"    # TP 時卡間步進，通常不用動
+
 if [ ! -d "$MODEL_DIR" ]; then
   echo "[entrypoint] ERROR: 權重目錄不存在：$MODEL_DIR （請用 -v 掛載）" >&2
   exit 1
 fi
 
 echo "[entrypoint] starting SGLang server (backend=$ATTN_BACKEND, model=$MODEL_DIR) ..."
+echo "[entrypoint] GPU: base-gpu-id=$BASE_GPU_ID tp-size=$TP_SIZE gpu-id-step=$GPU_ID_STEP （容器可見卡集合內的索引）"
 extra_args=()
 [ -n "$MAX_RUNNING_REQUESTS" ] && extra_args+=(--max-running-requests "$MAX_RUNNING_REQUESTS")
 
@@ -49,6 +58,9 @@ python -m sglang.launch_server \
     --page-size 1 \
     --mem-fraction-static "$MEM_FRACTION" \
     --context-length "$CONTEXT_LENGTH" \
+    --base-gpu-id "$BASE_GPU_ID" \
+    --tp-size "$TP_SIZE" \
+    --gpu-id-step "$GPU_ID_STEP" \
     --enable-custom-logit-processor \
     --disable-overlap-schedule \
     --skip-server-warmup \
