@@ -53,6 +53,25 @@ def server_healthy(url):
         return False
 
 
+def validate_clp_str(clp_str):
+    """結構檢查 custom_logit_processor 字串（純標準庫，不需 sglang，可整段複製到無 sglang 的環境）。
+
+    to_str() 產生的是 by-reference pickle（只存模組路徑 + class 名，約 100 bytes）；
+    只要字串一個 byte 都不差地送到 server，server 端就能還原。危險在於搬運途中
+    被截斷 / 再 escape 一次 / 去引號 —— 這種壞字串送到 SGLang server，其 scheduler
+    行程的 from_str() 反序列化會丟例外，而該處無 try/except，頂層 handler 會直接
+    對整個 engine 送 SIGQUIT（GPU 脫離）。故寧可在 client 端提早失敗。"""
+    try:
+        obj = json.loads(clp_str)
+        bytes.fromhex(obj["callable"])
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
+        raise ValueError(
+            f"custom_logit_processor 字串損壞（可能在搬運/傳遞途中被截斷或改寫）：{e}。"
+            "請確認整段 to_str() 字串原封不動送達，勿經過會截斷/再編碼的通道。"
+        ) from e
+    return clp_str
+
+
 def _encode_image(image_path):
     ext = os.path.splitext(image_path)[1].lower()
     mime = "image/jpeg" if ext in (".jpg", ".jpeg") else f"image/{ext.lstrip('.')}"
@@ -86,7 +105,8 @@ def sglang_stream(server_url, image_path, image_mode, ngram_window, ngram_size,
     if max_tokens:
         payload["max_tokens"] = int(max_tokens)
     if ngram_size > 0 and ngram_window > 0:
-        payload["custom_logit_processor"] = DeepseekOCRNoRepeatNGramLogitProcessor.to_str()
+        payload["custom_logit_processor"] = validate_clp_str(
+            DeepseekOCRNoRepeatNGramLogitProcessor.to_str())
         payload["custom_params"] = {"ngram_size": ngram_size, "window_size": ngram_window}
 
     session = requests.Session()

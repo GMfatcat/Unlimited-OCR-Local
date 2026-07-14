@@ -37,13 +37,25 @@ MAX_RETRIES = 5
 NO_REPEAT_NGRAM_PROCESSOR_STR = None
 
 
+def _validate_clp_str(clp_str):
+    """結構檢查 custom_logit_processor 字串（純標準庫）。壞字串（搬運途中被截斷/改寫）
+    送到 SGLang server 會讓 scheduler 反序列化丟例外並 SIGQUIT 整個 engine（GPU 脫離），
+    故在 client 端提早失敗。"""
+    try:
+        bytes.fromhex(json.loads(clp_str)["callable"])
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
+        raise ValueError(f"custom_logit_processor 字串損壞：{e}") from e
+    return clp_str
+
+
 def get_ngram_processor_str():
     global NO_REPEAT_NGRAM_PROCESSOR_STR
     if NO_REPEAT_NGRAM_PROCESSOR_STR is None:
         from sglang.srt.sampling.custom_logit_processor import (
             DeepseekOCRNoRepeatNGramLogitProcessor,
         )
-        NO_REPEAT_NGRAM_PROCESSOR_STR = DeepseekOCRNoRepeatNGramLogitProcessor.to_str()
+        NO_REPEAT_NGRAM_PROCESSOR_STR = _validate_clp_str(
+            DeepseekOCRNoRepeatNGramLogitProcessor.to_str())
     return NO_REPEAT_NGRAM_PROCESSOR_STR
 
 

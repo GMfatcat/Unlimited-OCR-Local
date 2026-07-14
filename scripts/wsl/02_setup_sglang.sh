@@ -27,6 +27,11 @@ uv pip install --python "$PY" \
   kernels==0.11.7 \
   pymupdf==1.27.2.2
 
+# 硬化 vendored sglang：壞掉的 custom_logit_processor 字串只失敗該 request，
+# 不會讓 scheduler SIGQUIT 整個 engine（GPU 脫離）。idempotent，可重跑。
+echo "== harden sglang (custom_logit_processor) =="
+"$PY" "$REPO/scripts/patch_sglang_hardening.py"
+
 echo "== sanity: import sglang + torch GPU =="
 "$PY" - <<'PY'
 import torch

@@ -264,7 +264,11 @@ def navigator(n):
     with nav.container():
         top = st.columns([3, 1])
         with top[0]:
-            if n < NAV_BUTTONS_FROM:
+            if n == 1:
+                # 單頁：slider 要求 min < max，n=1 會丟 StreamlitAPIException，直接顯示靜態頁碼
+                st.session_state.pagenum = 1
+                st.caption("共 1 頁")
+            elif n < NAV_BUTTONS_FROM:
                 st.session_state.pagenum = st.slider("頁碼", 1, n, min(st.session_state.pagenum, n))
             else:
                 c = st.columns([2, 1, 1, 1])
