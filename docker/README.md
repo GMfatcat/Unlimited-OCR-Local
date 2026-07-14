@@ -82,6 +82,14 @@ sm_90 路徑 SGLang(dev11416) 的 fused RoPE 走 tvm-ffi **runtime JIT**，第�
 **現行 `Dockerfile.h100` 已改回 devel-runtime base（含 nvcc/headers + build-essential），映像回到 ~33GB 級**，
 這是 sm_90 runtime JIT 的必要代價。下方 24.1GB slim 數字**不再是現行值**。
 
+## 🛡️ 硬化：壞掉的 `custom_logit_processor` 字串不再打死整個 engine（2026-07-14）
+壞掉的 ngram `custom_logit_processor` 字串（搬運途中被截斷/再 escape）送到 server，upstream SGLang 會在
+scheduler 行程反序列化失敗 → 冒到頂層 → `SIGQUIT` **整個 engine（GPU 脫離）**，單一壞 request 即可拖垮整台。
+`build` 階段已套用 `scripts/patch_sglang_hardening.py`（idempotent、marker `UOCR-HARDEN` 保護）硬化 vendored wheel：
+入口 `tokenizer_manager` 先驗證反序列化→壞字串以清楚錯誤 reject；`sampling_batch_info` scheduler 端加最後防線→
+`from_str()` 失敗只略過該 processor + log，engine 不死。
+**升級 sglang wheel 時**：patch anchor 若失效會**直接 fail（非默默略過）**，需重新核對後更新 patch。
+
 ## ✅ Build 驗證結果（本機 sm_120，2026-06-27，歷史紀錄）
 
 - `docker build` **成功**（exit 0）；torch cu128 + 客製 sglang wheel + flashinfer/sgl-kernel + streamlit 全數安裝。

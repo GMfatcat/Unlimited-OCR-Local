@@ -70,6 +70,12 @@ RUN uv pip install --python /opt/uocr/venv/bin/python \
         streamlit \
     && rm -rf /tmp/wheel
 
+# 硬化 vendored sglang：壞掉的 custom_logit_processor 字串只失敗該 request，
+# 不會讓 scheduler SIGQUIT 整個 engine（GPU 脫離）。必須在 venv 被 COPY 到 runtime 前套用。
+COPY scripts/patch_sglang_hardening.py /tmp/patch_sglang_hardening.py
+RUN /opt/uocr/venv/bin/python /tmp/patch_sglang_hardening.py \
+    && rm /tmp/patch_sglang_hardening.py
+
 # 清掉 __pycache__ 縮一點體積（不影響上面已快取的層）
 RUN find /opt/uocr/venv /root/.local/share/uv/python -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
 
